@@ -1,0 +1,11 @@
+*
+!/.gitignore
+!/postgres
+!/simple-dir
+!/run-tests.sh
+!/bench*.sh
+!/bench-*.py
+!/push-*.sh
+!/scp*.sh
+!version.sh
+/server

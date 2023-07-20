@@ -1,0 +1,15 @@
+/.vscode
+/snapshotter
+/ctr-cli
+/experiments
+/test.dimg
+/*.cdimg
+/httpd-*
+/mysql-*
+/postgres-*
+/redis-*
+*.log
+/images
+/diff
+/pack
+/server
