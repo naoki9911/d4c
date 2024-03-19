@@ -7,25 +7,29 @@ if [ $EUID -ne 0 ]; then
 fi
 RUN_NUM=1
 
-RESULT_DIR=benchmark_`date +%Y-%m-%d-%H%M`
-mkdir -p $RESULT_DIR
+PATH=$PATH:/usr/local/go/bin
 
-IMAGES=("apach-root" "mysql-root" "nginx-root" "postgres-root" "redis-root")
-for IMAGE in "${IMAGES[@]}"
+cd $(cd $(dirname $0); pwd)
+pushd ../
+make all
+popd
+
+RESULT_DIR=benchmark_`date +%Y-%m-%d-%H%M`
+IMAGE_DIR=$RESULT_DIR/images
+mkdir -p $IMAGE_DIR
+
+TESTS=("apache" "mysql" "nginx" "postgres" "redis")
+for TEST in "${TESTS[@]}"
 do
-	echo "Benchmarking $IMAGE"
-	cd $IMAGE
-	rm -f benchmark.log
-	ln -sf ../bench_impl.sh ./bench.sh
-	./bench.sh $RUN_NUM
-	cp benchmark.log ../$RESULT_DIR/$IMAGE-benchmark.log
-	cd ../
+	echo "Benchmarking $TEST"
+	./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM
+	cp $IMAGE_DIR/$TEST/benchmark.log ./$RESULT_DIR/$TEST-benchmark.log
 done
 
 cd $RESULT_DIR
-python ../bench-log.py benchmark
-python ../bench-agg-di3fs.py di3fs_log.csv > di3fs.csv
-python ../bench-agg-patch.py patch_log.csv > patch.csv
-python ../bench-agg-merge.py merge_log.csv > merge.csv
-python ../bench-agg-diff.py diff_binary_log.csv > diff_binary.csv
-python ../bench-agg-diff.py diff_file_log.csv > diff_file.csv
+python3 ../bench-log.py benchmark
+python3 ../bench-agg-di3fs.py di3fs_log.csv > di3fs.csv
+python3 ../bench-agg-patch.py patch_log.csv > patch.csv
+python3 ../bench-agg-merge.py merge_log.csv > merge.csv
+python3 ../bench-agg-diff.py diff_binary_log.csv > diff_binary.csv
+python3 ../bench-agg-diff.py diff_file_log.csv > diff_file.csv

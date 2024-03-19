@@ -13,3 +13,6 @@
 /diff
 /pack
 /server
+/fuse-diff
+/merge
+/patch

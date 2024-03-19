@@ -9,7 +9,7 @@ merge_csv = csv.writer(open("merge_log.csv", "w"))
 pull_csv = csv.writer(open("pull_log.csv", "w"))
 pull_download_csv = csv.writer(open("pull_download_log.csv", "w"))
 
-images=["apach-root", "mysql-root", "nginx-root", "postgres-root", "redis-root"]
+images=["apache", "mysql", "nginx", "postgres", "redis"]
 for image in images:
     with open("{}-{}.log".format(image, sys.argv[1])) as f:
         reader = csv.reader(f)
