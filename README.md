@@ -1,4 +1,5 @@
 # D4C: Delta updating for Container images
+[![Test](https://github.com/naoki9911/d4c/actions/workflows/test.yaml/badge.svg)](https://github.com/naoki9911/d4c/actions/workflows/test.yaml)
 This repository is PoC implementation of delta updating for containers.
 
 **D4C is in early development stage and more works are left.**
