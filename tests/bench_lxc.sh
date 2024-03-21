@@ -23,3 +23,5 @@ mkdir -p $IMAGE_DIR
 echo "Benchmarking $TEST"
 ./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM
 cp $IMAGE_DIR/$TEST/benchmark.log ./$RESULT_DIR/$TEST-benchmark.log
+
+./bench_patch_lxc.sh $TEST $RESULT_DIR

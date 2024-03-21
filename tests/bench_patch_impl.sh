@@ -4,8 +4,19 @@ fusermount3 -u /tmp/fuse
 
 set -eu
 
-source ./version.sh
-RUN_NUM=$1
+ROOT_DIR=$(cd $(dirname $0)/../; pwd)
+BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
+BIN_DIFF="$ROOT_DIR/diff"
+BIN_PACK="$ROOT_DIR/pack"
+BIN_PATCH="$ROOT_DIR/patch"
+BIN_FUSE="$ROOT_DIR/fuse-diff"
+BIN_MERGE="$ROOT_DIR/merge"
+
+TEST_SCRIPT=$1
+IMAGE_DIR=$2
+RUN_NUM=$3
+
+source $TEST_SCRIPT
 
 mkdir -p /tmp/fuse
 
@@ -13,15 +24,10 @@ function err() {
     fusermount3 -u /tmp/fuse
     exit 1
 }
-
 trap err ERR
 
-rm -f diff patch pack fuse-diff merge
-go build ../../cmd/diff
-go build ../../cmd/patch
-go build ../../cmd/pack
-go build ../../cmd/fuse-diff
-go build ../../cmd/merge
+IMAGE_DIR=$IMAGE_DIR/$IMAGE_NAME
+cd $IMAGE_DIR
 
 for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	LOWER=${IMAGE_VERSIONS[i]}
@@ -32,7 +38,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark patch $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		./patch dimg $LOWER $UPPER-patched diff_$DIFF_NAME.dimg benchmark
+		$BIN_PATCH dimg $LOWER $UPPER-patched diff_$DIFF_NAME.dimg benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
 
@@ -40,7 +46,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		./fuse-diff --basedir=./$LOWER-base.dimg --patchdir=./diff_$DIFF_NAME.dimg --mode=dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
+		$BIN_FUSE --basedir=./$LOWER-base.dimg --patchdir=./diff_$DIFF_NAME.dimg --mode=dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
 		sleep 5
 		if [ $j -eq 0 ]; then
 			diff -r $UPPER /tmp/fuse --no-dereference
