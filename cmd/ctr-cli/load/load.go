@@ -91,7 +91,7 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 
 	// now ready to create snapshot
-	err = sns.CreateSnapshot(ctx, snClient.SnClient, &image.Header.ManifestDigest, &image.DImgDigest)
+	err = sns.CreateSnapshot(ctx, snClient.SnClient, &image.Header.ManifestDigest, &image.DImgDigest, imageName+":"+imageVersion)
 	if err != nil {
 		return err
 	}

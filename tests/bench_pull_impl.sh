@@ -31,6 +31,8 @@ IMAGE_PATH=$(pwd)
 
 systemd-run --unit=d4c-server $BIN_SERVER
 systemd-run --unit=d4c-snapshotter $BIN_SNAPSHOTTER
+systemctl restart containerd
+sleep 2
 
 curl -XDELETE http://$SERVER_HOST/diffData/cleanup
 
@@ -172,6 +174,22 @@ for ((j=0; j < $RUN_NUM; j++));do
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_LOWER
+
+sleep 1
+ctr snapshot --snapshotter=di3fs tree | while read SNP; do 
+    SNP_IMAGE_TAG=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.image.name"')
+    MOUNT_PATH=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.mount"')
+    IMAGE_TAG=(${SNP_IMAGE_TAG//:/ })
+    SNP_IMAGE_NAME=${IMAGE_TAG[0]}
+    SNP_IMAGE_NAME=(${SNP_IMAGE_NAME//-/ })
+    SNP_IMAGE_NAME=${SNP_IMAGE_NAME[0]}
+    SNP_IMAGE_VERSION=${IMAGE_TAG[1]}
+
+    if [ "$SNP_IMAGE_NAME" == "$IMAGE_NAME" ]; then
+        echo "Checking $SNP_IMAGE_TAG at $MOUNT_PATH"
+        sudo diff -r $SNP_IMAGE_VERSION $MOUNT_PATH --no-dereference
+    fi
+done
 
 systemctl stop d4c-server
 systemctl stop d4c-snapshotter

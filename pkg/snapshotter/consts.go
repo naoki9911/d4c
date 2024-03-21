@@ -19,15 +19,17 @@ const SnapshotLabelRefImagePath = "containerd.io/snapshot/di3fs.ref.imagepath"
 const SnapshotLabelRefLayer = "containerd.io/snapshot/di3fs.ref.layer"
 const SnapshotLabelImageName = "containerd.io/snapshot/di3fs.image.name"
 const SnapshotLabelImageVersion = "containerd.io/snapshot/di3fs.image.version"
+const SnapshotLabelMount = "containerd.io/snapshot/di3fs.mount"
 const NerverGC = "containerd.io/gc.root"
 const TargetSnapshotLabel = "containerd.io/snapshot.ref"
 
-func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDigest, dimgDigest *digest.Digest) error {
+func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDigest, dimgDigest *digest.Digest, imageName string) error {
 	opts := snapshots.WithLabels(map[string]string{
 		NerverGC:                     "hogehoge",
 		SnapshotLabelRefImage:        manifestDigest.String(),
 		SnapshotLabelRefLayer:        fmt.Sprintf("%d", 0),
 		SnapshotLabelRefUncompressed: dimgDigest.String(),
+		SnapshotLabelImageName:       imageName,
 		//targetSnapshotLabel:          chain.Hex(),
 		//remoteLabel:                  "true",
 	})
@@ -37,12 +39,20 @@ func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDiges
 	// TODO: handle this correctly
 	_ = ss.Remove(ctx, dimgDigest.String())
 
-	_, err := ss.Prepare(ctx, randId, "", opts)
+	mounts, err := ss.Prepare(ctx, randId, "", opts)
 	if err != nil {
 		log.G(ctx).WithField("opts", opts).Error("failed to prepare")
 		return err
 	}
-	err = ss.Commit(ctx, dimgDigest.String(), randId, opts)
+	log.G(ctx).Infof("mounts=%v", mounts)
+	mountPath := ""
+	if len(mounts) > 0 {
+		mountPath = mounts[0].Source
+	}
+	optsWithMount := snapshots.WithLabels(map[string]string{
+		SnapshotLabelMount: mountPath,
+	})
+	err = ss.Commit(ctx, dimgDigest.String(), randId, opts, optsWithMount)
 	if err != nil {
 		log.G(ctx).Errorf("failed to commit snapshot :%w", err)
 		return err
