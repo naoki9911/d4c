@@ -1,6 +1,7 @@
 package snapshotter
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/containerd/containerd"
@@ -28,6 +29,7 @@ func NewClient() (*Client, error) {
 
 	c.SnClient = c.CtrClient.SnapshotService("di3fs")
 	c.SnImageStorePath = filepath.Join(c.SnRootPath, "images")
+	os.MkdirAll(c.SnImageStorePath, 0o644)
 
 	return c, nil
 }

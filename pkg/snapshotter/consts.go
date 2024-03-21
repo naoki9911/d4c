@@ -33,12 +33,11 @@ func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDiges
 	})
 
 	randId := utils.GetRandomId("di3fs")
-	err := ss.Remove(ctx, dimgDigest.String())
-	if err != nil {
-		log.G(ctx).Errorf("failed to remove %q : %v", dimgDigest.String(), err)
-	}
+	// ignore error
+	// TODO: handle this correctly
+	_ = ss.Remove(ctx, dimgDigest.String())
 
-	_, err = ss.Prepare(ctx, randId, "", opts)
+	_, err := ss.Prepare(ctx, randId, "", opts)
 	if err != nil {
 		log.G(ctx).WithField("opts", opts).Error("failed to prepare")
 		return err

@@ -119,6 +119,13 @@ func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node,
 		ret = append(ret, ret_rev[len(ret_rev)-i-1])
 	}
 
+	// Reset all nodes
+	for i := range self.nodes {
+		self.nodes[i].done = false
+		self.nodes[i].cost = -1
+		self.nodes[i].prev = nil
+	}
+
 	return ret, nil
 }
 

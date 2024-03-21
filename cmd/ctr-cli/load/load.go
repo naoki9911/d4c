@@ -71,7 +71,6 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 
 	// register image
 	is := snClient.CtrClient.ImageService()
-	is.Delete(ctx, "test-image")
 	_, err = is.Create(ctx, images.Image{
 		Name: imageName + ":" + imageVersion,
 		Target: v1.Descriptor{
