@@ -25,3 +25,4 @@ echo "Benchmarking $TEST"
 cp $IMAGE_DIR/$TEST/benchmark.log ./$RESULT_DIR/$TEST-benchmark.log
 
 ./bench_patch_lxc.sh $TEST $RESULT_DIR
+./bench_pull_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM localhost:8081
