@@ -80,6 +80,39 @@ curl -XPOST http://$SERVER_HOST/diffData/add \
 }
 EOF
 
+curl -XPOST http://$SERVER_HOST/diffData/add \
+     -d @- <<EOF
+{
+        "imageName": "$IMAGE_NAME-stack",
+        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
+        "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
+        "version":"$IMAGE_LOWER",
+        "baseVersion":""
+}
+EOF
+
+curl -XPOST http://$SERVER_HOST/diffData/add \
+     -d @- <<EOF
+{
+        "imageName": "$IMAGE_NAME-stack",
+        "fileName":"$IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg",
+        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
+        "version":"$IMAGE_MIDDLE",
+        "baseVersion":"$IMAGE_LOWER"
+}
+EOF
+
+curl -XPOST http://$SERVER_HOST/diffData/add \
+     -d @- <<EOF
+{
+        "imageName": "$IMAGE_NAME-stack",
+        "fileName":"$IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg",
+        "configPath":"$IMAGE_PATH/image-$IMAGE_UPPER/config.json",
+        "version":"$IMAGE_UPPER",
+        "baseVersion":"$IMAGE_MIDDLE"
+}
+EOF
+
 
 curl -XPOST http://$SERVER_HOST/diffData/add \
      -d @- <<EOF
@@ -174,6 +207,13 @@ for ((j=0; j < $RUN_NUM; j++));do
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_LOWER
+
+$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_LOWER --host $SERVER_HOST
+$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_MIDDLE --host $SERVER_HOST
+$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_UPPER --host $SERVER_HOST
+ctr image rm $IMAGE_NAME-stack:$IMAGE_UPPER
+ctr image rm $IMAGE_NAME-stack:$IMAGE_MIDDLE
+ctr image rm $IMAGE_NAME-stack:$IMAGE_LOWER
 
 sleep 1
 ctr snapshot --snapshotter=di3fs tree | while read SNP; do 
