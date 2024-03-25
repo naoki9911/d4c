@@ -312,17 +312,17 @@ func GenerateDiffFromDir(basePath, newPath, outPath string, isBinaryDiff, baseEx
 }
 
 func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool) error {
-	oldImg, oldImgFile, oldOffset, err := di3fs.LoadImage(oldDimgPath)
+	oldDimg, err := OpenDimgFile(oldDimgPath)
 	if err != nil {
 		return err
 	}
-	defer oldImgFile.Close()
+	defer oldDimg.Close()
 
-	newImg, newImgFile, newOffset, err := di3fs.LoadImage(newDimgPath)
+	newDimg, err := OpenDimgFile(newDimgPath)
 	if err != nil {
 		return err
 	}
-	defer newImgFile.Close()
+	defer newDimg.Close()
 
 	diffFile, err := os.Create(diffDimgPath)
 	if err != nil {
@@ -331,7 +331,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer diffFile.Close()
 
 	diffOut := bytes.Buffer{}
-	_, err = generateDiffFromDimg(oldImgFile, oldOffset, &oldImg.FileEntry, newImgFile, newOffset, &newImg.FileEntry, &diffOut, isBinaryDiff)
+	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.ImageHeader().FileEntry, &newDimg.ImageHeader().FileEntry, &diffOut, isBinaryDiff)
 	if err != nil {
 		return err
 	}
@@ -350,7 +350,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 
 	header := di3fs.ImageHeader{
 		BaseId:    baseId,
-		FileEntry: newImg.FileEntry,
+		FileEntry: newDimg.imageHeader.FileEntry,
 	}
 
 	jsonBytes, err := json.Marshal(header)
@@ -395,7 +395,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 }
 
 // @return bool: is entirly new ?
-func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.FileEntry, newImgFile *os.File, newOffset int64, newEntry *di3fs.FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
+func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *di3fs.FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
 	entireNew := true
 
 	for i := range newEntry.Childs {
@@ -414,13 +414,13 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 		// newly created file or directory
 		if oldEntry == nil {
 			if newChildEntry.IsDir() {
-				_, err := generateDiffFromDimg(oldImgFile, oldOffset, nil, newImgFile, newOffset, &newEntry.Childs[i], diffBody, isBinaryDiff)
+				_, err := generateDiffFromDimg(oldDimgFile, newDimgFile, nil, &newEntry.Childs[i], diffBody, isBinaryDiff)
 				if err != nil {
 					return false, err
 				}
 			} else {
 				newBytes := make([]byte, newChildEntry.CompressedSize)
-				_, err := newImgFile.ReadAt(newBytes, newOffset+newChildEntry.Offset)
+				_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
 				if err != nil {
 					return false, err
 				}
@@ -448,13 +448,13 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 			oldChildEntry.Name != newChildEntry.Name ||
 			oldChildEntry.Type != newChildEntry.Type {
 			if newChildEntry.IsDir() {
-				_, err := generateDiffFromDimg(oldImgFile, oldOffset, nil, newImgFile, newOffset, &newEntry.Childs[i], diffBody, isBinaryDiff)
+				_, err := generateDiffFromDimg(oldDimgFile, newDimgFile, nil, &newEntry.Childs[i], diffBody, isBinaryDiff)
 				if err != nil {
 					return false, err
 				}
 			} else {
 				newBytes := make([]byte, newChildEntry.CompressedSize)
-				_, err := newImgFile.ReadAt(newBytes, newOffset+newChildEntry.Offset)
+				_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
 				if err != nil {
 					return false, err
 				}
@@ -470,7 +470,7 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 
 		// if both new and old are directory, recursively generate diff
 		if newChildEntry.IsDir() {
-			new, err := generateDiffFromDimg(oldImgFile, oldOffset, &oldEntry.Childs[oldChildIdx], newImgFile, newOffset, &newEntry.Childs[i], diffBody, isBinaryDiff)
+			new, err := generateDiffFromDimg(oldDimgFile, newDimgFile, &oldEntry.Childs[oldChildIdx], &newEntry.Childs[i], diffBody, isBinaryDiff)
 			if err != nil {
 				return false, err
 			}
@@ -482,7 +482,7 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 		}
 
 		newCompressedBytes := make([]byte, newChildEntry.CompressedSize)
-		_, err := newImgFile.ReadAt(newCompressedBytes, newOffset+newChildEntry.Offset)
+		_, err := newDimgFile.ReadAt(newCompressedBytes, newChildEntry.Offset)
 		if err != nil {
 			return false, err
 		}
@@ -492,7 +492,7 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 		}
 
 		oldCompressedBytes := make([]byte, oldChildEntry.CompressedSize)
-		_, err = oldImgFile.ReadAt(oldCompressedBytes, oldOffset+oldChildEntry.Offset)
+		_, err = oldDimgFile.ReadAt(oldCompressedBytes, oldChildEntry.Offset)
 		if err != nil {
 			return false, err
 		}
@@ -525,7 +525,7 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 			newChildEntry.Type = di3fs.FILE_ENTRY_FILE_DIFF
 		} else {
 			newBytes := make([]byte, newChildEntry.CompressedSize)
-			_, err := newImgFile.ReadAt(newBytes, newOffset+newChildEntry.Offset)
+			_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
 			if err != nil {
 				return false, err
 			}
