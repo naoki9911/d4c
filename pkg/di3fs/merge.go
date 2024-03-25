@@ -745,7 +745,7 @@ func copyDimg(entry *FileEntry, upperPath string, upperImgFile *os.File, upperOf
 			mergeEntry.Childs = append(mergeEntry.Childs, *mergeChild)
 		}
 	} else {
-		log.Debugf("Copy %s from upper", upperPath)
+		log.Debugf("Copy %s from upper offset=0x%x type=%d", upperPath, entry.Offset, entry.Type)
 		upperBytes := make([]byte, entry.CompressedSize)
 		_, err := upperImgFile.ReadAt(upperBytes, upperOffset+entry.Offset)
 		if err != nil {

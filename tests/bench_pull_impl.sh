@@ -40,7 +40,7 @@ curl -XPOST http://$SERVER_HOST/diffData/add \
      -d @- <<EOF
 {
         "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/$IMAGE_LOWER-base.dimg",
+        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
         "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
         "version":"$IMAGE_LOWER",
         "baseVersion":""
@@ -51,7 +51,7 @@ curl -XPOST http://$SERVER_HOST/diffData/add \
      -d @- <<EOF
 {
         "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE-base.dimg",
+        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE.dimg",
         "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
         "version":"$IMAGE_MIDDLE",
         "baseVersion":""
@@ -85,7 +85,7 @@ curl -XPOST http://$SERVER_HOST/diffData/add \
      -d @- <<EOF
 {
         "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/$IMAGE_LOWER-base.dimg",
+        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
         "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
         "version":"$IMAGE_LOWER",
         "baseVersion":""
@@ -96,7 +96,7 @@ curl -XPOST http://$SERVER_HOST/diffData/add \
      -d @- <<EOF
 {
         "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE-base.dimg",
+        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE.dimg",
         "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
         "version":"$IMAGE_MIDDLE",
         "baseVersion":""

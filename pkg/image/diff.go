@@ -311,7 +311,7 @@ func GenerateDiffFromDir(basePath, newPath, outPath string, isBinaryDiff, baseEx
 	return entry, err
 }
 
-func GenerateDiffFromDimg(oldDimgPath, newDimgPath, parentDimgPath, diffDimgPath string, isBinaryDiff bool) error {
+func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool) error {
 	oldImg, oldImgFile, oldOffset, err := di3fs.LoadImage(oldDimgPath)
 	if err != nil {
 		return err
@@ -335,19 +335,19 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, parentDimgPath, diffDimgPath
 	if err != nil {
 		return err
 	}
-	baseId := ""
-	if parentDimgPath != "" {
-		h := sha256.New()
-		baseImg, err := os.Open(parentDimgPath)
-		if err != nil {
-			panic(err)
-		}
-		_, err = io.Copy(h, baseImg)
-		if err != nil {
-			panic(err)
-		}
-		baseId = fmt.Sprintf("sha256:%x", h.Sum(nil))
+
+	h := sha256.New()
+	baseImg, err := os.Open(oldDimgPath)
+	if err != nil {
+		panic(err)
 	}
+	defer baseImg.Close()
+	_, err = io.Copy(h, baseImg)
+	if err != nil {
+		panic(err)
+	}
+	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
+
 	header := di3fs.ImageHeader{
 		BaseId:    baseId,
 		FileEntry: newImg.FileEntry,
@@ -438,10 +438,14 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 		for oldChildIdx < len(oldEntry.Childs) && oldEntry.Childs[oldChildIdx].Name != newChildEntry.Name {
 			oldChildIdx += 1
 		}
-		oldChildEntry := oldEntry.Childs[oldChildIdx]
+		var oldChildEntry *di3fs.FileEntry = nil
+		if oldChildIdx < len(oldEntry.Childs) {
+			oldChildEntry = &oldEntry.Childs[oldChildIdx]
+		}
 
 		// newly created file or directory including unmatched EntryType
-		if oldChildEntry.Name != newChildEntry.Name ||
+		if oldChildEntry == nil ||
+			oldChildEntry.Name != newChildEntry.Name ||
 			oldChildEntry.Type != newChildEntry.Type {
 			if newChildEntry.IsDir() {
 				_, err := generateDiffFromDimg(oldImgFile, oldOffset, nil, newImgFile, newOffset, &newEntry.Childs[i], diffBody, isBinaryDiff)
@@ -503,9 +507,11 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 			continue
 		}
 
-		if isBinaryDiff {
+		// old File may be 0-bytes
+		if len(oldBytes) > 0 && isBinaryDiff {
 			entireNew = false
 			diffWriter := new(bytes.Buffer)
+			//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
 			err = bsdiff.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), diffWriter)
 			if err != nil {
 				return false, err
@@ -531,8 +537,12 @@ func generateDiffFromDimg(oldImgFile *os.File, oldOffset int64, oldEntry *di3fs.
 			newChildEntry.Type = di3fs.FILE_ENTRY_FILE_NEW
 		}
 	}
-	if newEntry.IsDir() && entireNew {
-		newEntry.Type = di3fs.FILE_ENTRY_DIR_NEW
+	if newEntry.IsDir() {
+		if entireNew {
+			newEntry.Type = di3fs.FILE_ENTRY_DIR_NEW
+		} else {
+			newEntry.Type = di3fs.FILE_ENTRY_DIR
+		}
 	}
 	return entireNew, nil
 }

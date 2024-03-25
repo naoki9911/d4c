@@ -42,6 +42,11 @@ var Flags = []cli.Flag{
 		Usage:    "output cdimg image (Root required)",
 		Required: false,
 	},
+	&cli.StringSliceFlag{
+		Name:     "excludes",
+		Usage:    "path to exclude from image",
+		Required: false,
+	},
 }
 
 var workDir = filepath.Join(os.TempDir(), "ctr-cli")
@@ -212,6 +217,15 @@ func Action(c *cli.Context) error {
 	err = exec.Command("tar", "-xf", layerNewPath, "-C", tempDir).Run()
 	if err != nil {
 		return fmt.Errorf("failed to extract layer(%s) to %s: %v", layerNewPath, tempDir, err)
+	}
+
+	excludes := c.StringSlice("excludes")
+	for _, exclude := range excludes {
+		p := filepath.Join(tempDir, exclude)
+		err = os.RemoveAll(p)
+		if err != nil {
+			return fmt.Errorf("failed to exclude %s (path=%s)", exclude, p)
+		}
 	}
 
 	tempDiffDir, err := ioutil.TempDir("/tmp/ctr-cli", "*")
