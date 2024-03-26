@@ -11,7 +11,6 @@ import (
 
 	"github.com/icedream/go-bsdiff"
 	"github.com/klauspost/compress/zstd"
-	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/dsnet/compress/bzip2"
@@ -543,7 +542,7 @@ func DeltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) err
 
 var ErrUnexpected = fmt.Errorf("unexpected error")
 
-func copyDimg(entry *di3fs.FileEntry, upperPath string, upperImgFile *DimgFile, mergeOut *bytes.Buffer) (*di3fs.FileEntry, error) {
+func copyDimg(entry *FileEntry, upperPath string, upperImgFile *DimgFile, mergeOut *bytes.Buffer) (*FileEntry, error) {
 	mergeEntry := entry.DeepCopy()
 	if entry.IsDir() {
 		for fName := range entry.Childs {
@@ -571,12 +570,12 @@ func copyDimg(entry *di3fs.FileEntry, upperPath string, upperImgFile *DimgFile, 
 
 }
 
-func MergeDiffDimg(lowerEntry, upperEntry *di3fs.FileEntry, lowerDiff, upperDiff string, lowerImgFile, upperImgFile *DimgFile, mergeEntry *di3fs.FileEntry, mergeOut *bytes.Buffer) error {
+func MergeDiffDimg(lowerEntry, upperEntry *FileEntry, lowerDiff, upperDiff string, lowerImgFile, upperImgFile *DimgFile, mergeEntry *FileEntry, mergeOut *bytes.Buffer) error {
 	for upperfName := range upperEntry.Childs {
 		upperChild := upperEntry.Childs[upperfName]
 		log.Debugf("Processsing %s", path.Join(upperDiff, upperChild.Name))
 		upperDiffPath := path.Join(upperDiff, upperChild.Name)
-		var mergeChild *di3fs.FileEntry = nil
+		var mergeChild *FileEntry = nil
 		if upperChild.IsNew() {
 			log.Debugf("upperChild is New")
 			c, err := copyDimg(upperChild, upperDiffPath, upperImgFile, mergeOut)
@@ -678,7 +677,7 @@ func MergeDiffDimg(lowerEntry, upperEntry *di3fs.FileEntry, lowerDiff, upperDiff
 					} else if !upperChild.IsNew() {
 						log.Debugf("Apply patch %v to %v", lowerDiffPath, upperDiffPath)
 						mergeChild = upperChild.DeepCopy()
-						mergeChild.Type = di3fs.FILE_ENTRY_FILE_NEW
+						mergeChild.Type = FILE_ENTRY_FILE_NEW
 
 						lowerBytes := make([]byte, lowerChild.CompressedSize)
 						upperBytes := make([]byte, upperChild.CompressedSize)
@@ -707,7 +706,7 @@ func MergeDiffDimg(lowerEntry, upperEntry *di3fs.FileEntry, lowerDiff, upperDiff
 							return err
 						}
 
-						mergeCompressed, err := di3fs.CompressWithZstd(mergeBytes.Bytes())
+						mergeCompressed, err := CompressWithZstd(mergeBytes.Bytes())
 						if err != nil {
 							return err
 						}
@@ -793,7 +792,7 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) error {
 		panic(err)
 	}
 
-	header := di3fs.ImageHeader{
+	header := ImageHeader{
 		BaseId:    lowerImgFile.ImageHeader().BaseId,
 		FileEntry: *mergedEntry,
 	}

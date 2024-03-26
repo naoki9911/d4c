@@ -1,4 +1,4 @@
-package di3fs
+package image
 
 import (
 	"bytes"
@@ -45,11 +45,6 @@ func UnmarshalJsonFromCompressed[T any](b []byte) (*T, error) {
 	}
 
 	return &res, nil
-}
-
-type ImageHeader struct {
-	BaseId    string    `json:"baseID"`
-	FileEntry FileEntry `json:"fileEntry"`
 }
 
 type FileEntry struct {

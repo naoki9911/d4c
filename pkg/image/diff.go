@@ -11,7 +11,6 @@ import (
 
 	"github.com/icedream/go-bsdiff"
 	"github.com/klauspost/compress/zstd"
-	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 )
 
@@ -61,7 +60,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	}
 	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
 
-	header := di3fs.ImageHeader{
+	header := ImageHeader{
 		BaseId:    baseId,
 		FileEntry: newDimg.imageHeader.FileEntry,
 	}
@@ -108,18 +107,18 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 }
 
 // @return bool: is entirly new ?
-func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *di3fs.FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
+func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
 	entireNew := true
 
 	for fName := range newEntry.Childs {
 		newChildEntry := newEntry.Childs[fName]
-		if newChildEntry.Type == di3fs.FILE_ENTRY_FILE_SAME ||
-			newChildEntry.Type == di3fs.FILE_ENTRY_FILE_DIFF {
+		if newChildEntry.Type == FILE_ENTRY_FILE_SAME ||
+			newChildEntry.Type == FILE_ENTRY_FILE_DIFF {
 			return false, fmt.Errorf("invalid dimg")
 		}
 
-		if newChildEntry.Type == di3fs.FILE_ENTRY_OPAQUE ||
-			newChildEntry.Type == di3fs.FILE_ENTRY_SYMLINK ||
+		if newChildEntry.Type == FILE_ENTRY_OPAQUE ||
+			newChildEntry.Type == FILE_ENTRY_SYMLINK ||
 			newChildEntry.Size == 0 {
 			continue
 		}
@@ -209,7 +208,7 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 		isSame := bytes.Equal(newBytes, oldBytes)
 		if isSame {
 			entireNew = false
-			newChildEntry.Type = di3fs.FILE_ENTRY_FILE_SAME
+			newChildEntry.Type = FILE_ENTRY_FILE_SAME
 			continue
 		}
 
@@ -228,7 +227,7 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 			if err != nil {
 				return false, err
 			}
-			newChildEntry.Type = di3fs.FILE_ENTRY_FILE_DIFF
+			newChildEntry.Type = FILE_ENTRY_FILE_DIFF
 		} else {
 			newBytes := make([]byte, newChildEntry.CompressedSize)
 			_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
@@ -240,14 +239,14 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 			if err != nil {
 				return false, err
 			}
-			newChildEntry.Type = di3fs.FILE_ENTRY_FILE_NEW
+			newChildEntry.Type = FILE_ENTRY_FILE_NEW
 		}
 	}
 	if newEntry.IsDir() {
 		if entireNew {
-			newEntry.Type = di3fs.FILE_ENTRY_DIR_NEW
+			newEntry.Type = FILE_ENTRY_DIR_NEW
 		} else {
-			newEntry.Type = di3fs.FILE_ENTRY_DIR
+			newEntry.Type = FILE_ENTRY_DIR
 		}
 	}
 	return entireNew, nil

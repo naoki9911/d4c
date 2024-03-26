@@ -8,7 +8,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -58,10 +58,8 @@ func main() {
 	bench := flag.Bool("benchmark", false, "measure benchmark")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to this file")
 	memprofile := flag.String("memprofile", "", "write memory profile to this file")
-	metafile := flag.String("metafile", "", "metadata to be read")
-	baseDir := flag.String("basedir", "", "base directory to be patched")
-	patchDir := flag.String("patchdir", "", "patch directory")
-	mode := flag.String("mode", "dir", "diff image type [dimg|dir]")
+	baseDimg := flag.String("baseDimg", "", "base directory to be patched")
+	diffDimg := flag.String("diffDimg", "", "patch directory")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Printf("usage: %s MOUNTPOINT\n", path.Base(os.Args[0]))
@@ -98,77 +96,43 @@ func main() {
 		fmt.Printf("Note: You must unmount gracefully, otherwise the profile file(s) will stay empty!\n")
 	}
 
-	if *patchDir == "" {
-		fmt.Println("please specify patchdir")
+	if *diffDimg == "" {
+		fmt.Println("please specify diffDimg")
 		os.Exit(1)
 	}
-	patchDirAbs, err := filepath.Abs(*patchDir)
+	diffDimgAbs, err := filepath.Abs(*diffDimg)
 	if err != nil {
 		panic(err)
 	}
-	if *mode == "" {
-		fmt.Println("please specify mode")
-		os.Exit(1)
+
+	diffImageFile, err := image.OpenDimgFile(diffDimgAbs)
+	if err != nil {
+		panic(err)
 	}
+	var baseImageFile *image.DimgFile = nil
 
-	var metaJson = di3fs.FileEntry{}
-	var imageFile *os.File = nil
-	imageBodyOffset := int64(0)
-	var baseMetaJson *di3fs.FileEntry = nil
-	var baseImageFile *os.File = nil
-	var baseImageBodyOffset = int64(0)
-	baseNeeded := true
-
-	if *mode == "dimg" {
-		var imageHeader *di3fs.ImageHeader
-		imageHeader, imageFile, imageBodyOffset, err = di3fs.LoadImage(patchDirAbs)
-		if err != nil {
-			panic(err)
-		}
-		metaJson = imageHeader.FileEntry
-		baseNeeded = imageHeader.BaseId != ""
-
-		if imageHeader.BaseId != "" {
-			var baseImageHeader *di3fs.ImageHeader
-			var baseDirAbs string
-			if *baseDir != "" {
-				baseDirAbs, err = filepath.Abs(*baseDir)
-				if err != nil {
-					panic(err)
-				}
-			} else {
-				imageStore, _ := filepath.Split(patchDirAbs)
-				baseDirAbs = filepath.Join(imageStore, imageHeader.BaseId+".dimg")
-			}
-			baseImageHeader, baseImageFile, baseImageBodyOffset, err = di3fs.LoadImage(baseDirAbs)
+	baseNeeded := diffImageFile.ImageHeader().BaseId != ""
+	if baseNeeded {
+		var baseDimgAbs string
+		if *baseDimg != "" {
+			baseDimgAbs, err = filepath.Abs(*baseDimg)
 			if err != nil {
 				panic(err)
 			}
-			baseMetaJson = &baseImageHeader.FileEntry
-			baseNeeded = false
+		} else {
+			imageStore, _ := filepath.Split(diffDimgAbs)
+			baseDimgAbs = filepath.Join(imageStore, diffImageFile.ImageHeader().BaseId+".dimg")
 		}
-	} else {
-		if *metafile == "" {
-			fmt.Println("please specify metafile")
-			os.Exit(1)
-		}
-		metaJsonRaw, err := os.ReadFile(*metafile)
+		baseImageFile, err = image.OpenDimgFile(baseDimgAbs)
 		if err != nil {
 			panic(err)
 		}
-		err = json.Unmarshal(metaJsonRaw, &metaJson)
-		if err != nil {
-			panic(err)
-		}
+		baseNeeded = false
 	}
 
-	if baseNeeded && *baseDir == "" {
-		fmt.Println("please specify basedir")
+	if baseNeeded && *baseDimg == "" {
+		fmt.Println("please specify baseDimg")
 		os.Exit(1)
-	}
-	baseDirAbs, err := filepath.Abs(*baseDir)
-	if err != nil {
-		panic(err)
 	}
 
 	sec := time.Second
@@ -196,7 +160,7 @@ func main() {
 	// Leave file permissions on "000" files as-is
 	opts.NullPermissions = true
 
-	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []string{baseDirAbs}, patchDirAbs, &metaJson, []*di3fs.FileEntry{baseMetaJson}, []*os.File{baseImageFile}, []int64{baseImageBodyOffset}, imageFile, imageBodyOffset)
+	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []*image.DimgFile{baseImageFile}, diffImageFile)
 	if err != nil {
 		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
 	}
@@ -213,9 +177,8 @@ func main() {
 			TaskName:     "di3fs",
 			ElapsedMilli: int(elapsedMilli),
 			Labels: []string{
-				"base:" + *baseDir,
-				"patch:" + *patchDir,
-				*mode,
+				"base:" + *baseDimg,
+				"patch:" + *diffDimg,
 			},
 		}
 		err = b.AppendResult(metric)

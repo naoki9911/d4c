@@ -3,12 +3,15 @@ package image
 import (
 	"encoding/binary"
 	"os"
-
-	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 )
 
+type ImageHeader struct {
+	BaseId    string    `json:"baseID"`
+	FileEntry FileEntry `json:"fileEntry"`
+}
+
 type DimgFile struct {
-	imageHeader *di3fs.ImageHeader
+	imageHeader *ImageHeader
 	file        *os.File
 	bodyOffset  int64
 }
@@ -34,7 +37,7 @@ func OpenDimgFile(path string) (*DimgFile, error) {
 		return nil, err
 	}
 	curOffset += int64(compressedHeaderSize)
-	imageHeader, err := di3fs.UnmarshalJsonFromCompressed[di3fs.ImageHeader](compressedHeader)
+	imageHeader, err := UnmarshalJsonFromCompressed[ImageHeader](compressedHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +50,7 @@ func OpenDimgFile(path string) (*DimgFile, error) {
 	return df, nil
 }
 
-func (df *DimgFile) ImageHeader() *di3fs.ImageHeader {
+func (df *DimgFile) ImageHeader() *ImageHeader {
 	return df.imageHeader
 }
 

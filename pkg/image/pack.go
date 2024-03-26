@@ -10,7 +10,6 @@ import (
 	"path"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 )
 
 func compressFileWithZstd(path string) ([]byte, error) {
@@ -25,7 +24,7 @@ func compressFileWithZstd(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	res, err := di3fs.CompressWithZstd(fileBytes)
+	res, err := CompressWithZstd(fileBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +46,7 @@ func PackFile(srcFilePath string, out io.Writer) (int64, error) {
 	return int64(writtenSize), err
 }
 
-func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Buffer) error {
+func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) error {
 	logger.Debugf("dirPath:%s\n", dirPath)
 	dirEntries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -80,10 +79,10 @@ func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Bu
 			continue
 		}
 
-		entry := &di3fs.FileEntry{
+		entry := &FileEntry{
 			Name:   fName,
 			Mode:   uint32(fileInfo.Mode()),
-			Childs: map[string]*di3fs.FileEntry{},
+			Childs: map[string]*FileEntry{},
 		}
 
 		if fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
@@ -91,7 +90,7 @@ func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Bu
 			if err != nil {
 				return err
 			}
-			entry.Type = di3fs.FILE_ENTRY_SYMLINK
+			entry.Type = FILE_ENTRY_SYMLINK
 			entry.RealPath = realPath
 			outDirEntry.Childs[fName] = entry
 			continue
@@ -123,7 +122,7 @@ func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Bu
 			return err
 		}
 		entry.CompressedSize = writtenSize
-		entry.Type = di3fs.FILE_ENTRY_FILE_NEW
+		entry.Type = FILE_ENTRY_FILE_NEW
 		outDirEntry.Childs[fName] = entry
 	}
 
@@ -133,9 +132,9 @@ func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Bu
 	}
 	for _, childDir := range childDirs {
 		childDirPath := path.Join(dirPath, childDir.Name())
-		entry := &di3fs.FileEntry{
+		entry := &FileEntry{
 			Name:   childDir.Name(),
-			Childs: map[string]*di3fs.FileEntry{},
+			Childs: map[string]*FileEntry{},
 		}
 		err = packDirImpl(childDirPath, entry, outBody)
 		if err != nil {
@@ -154,15 +153,15 @@ func packDirImpl(dirPath string, outDirEntry *di3fs.FileEntry, outBody *bytes.Bu
 		return err
 	}
 
-	outDirEntry.Type = di3fs.FILE_ENTRY_DIR_NEW
+	outDirEntry.Type = FILE_ENTRY_DIR_NEW
 	outDirEntry.OaqueFiles = opaqueFiles
 	return nil
 }
 
 func PackDir(dirPath, outDimgPath string) error {
-	entry := &di3fs.FileEntry{
+	entry := &FileEntry{
 		Name:   "/",
-		Childs: map[string]*di3fs.FileEntry{},
+		Childs: map[string]*FileEntry{},
 	}
 	outDimg, err := os.Create(outDimgPath)
 	if err != nil {
@@ -176,7 +175,7 @@ func PackDir(dirPath, outDimgPath string) error {
 		return err
 	}
 
-	header := di3fs.ImageHeader{
+	header := ImageHeader{
 		BaseId:    "",
 		FileEntry: *entry,
 	}
