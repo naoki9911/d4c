@@ -113,7 +113,7 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (dn *Di3fsNode) openFileInImage(ctx context.Context, flags uint32, baseImgIdx int) (fs.FileHandle, uint32, syscall.Errno) {
+func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 	if dn.file != nil || len(dn.data) != 0 {
 	} else if dn.meta.IsNew() {
 		patchBytes := make([]byte, dn.meta.CompressedSize)
@@ -180,7 +180,7 @@ func (dn *Di3fsNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uin
 	defer log.Traceln("Open finished")
 	isImage := dn.root.diffImage != nil
 	if isImage {
-		return dn.openFileInImage(ctx, flags, 0)
+		return dn.openFileInImage()
 	}
 
 	if dn.file != nil || len(dn.data) != 0 {
@@ -275,10 +275,9 @@ func generateOpaqueFileEntry(dir *FileEntry) (*FileEntry, error) {
 		Name:     ".wh..wh..opq",
 		Size:     int(0),
 		Mode:     uint32(dir.Mode),
-		DiffName: ".wh..wh..opq",
 		Type:     FILE_ENTRY_OPAQUE,
 		RealPath: "",
-		Childs:   []FileEntry{},
+		Childs:   map[string]*FileEntry{},
 	}
 
 	return fe, nil
@@ -321,18 +320,16 @@ func (dr *Di3fsNode) OnAdd(ctx context.Context) {
 			dr.AddChild(n.meta.Name, cNode, false)
 		}
 	}
-	for i := range dr.meta.Childs {
-		c := dr.meta.Childs[i]
+	for childfName := range dr.meta.Childs {
+		c := dr.meta.Childs[childfName]
 		var childBaseFEs []*FileEntry = make([]*FileEntry, 0)
 		for baseMetaIdx := range dr.baseMeta {
-			for baseIdx := range dr.baseMeta[baseMetaIdx].Childs {
-				baseChild := dr.baseMeta[baseMetaIdx].Childs[baseIdx]
-				if baseChild.Name == c.Name {
-					childBaseFEs = append(childBaseFEs, &baseChild)
-				}
+			baseChild := dr.baseMeta[baseMetaIdx].Childs[childfName]
+			if baseChild != nil {
+				childBaseFEs = append(childBaseFEs, baseChild)
 			}
 		}
-		n := newNode(dr.basePath, dr.patchPath, &c, childBaseFEs, dr.root)
+		n := newNode(dr.basePath, dr.patchPath, c, childBaseFEs, dr.root)
 		stableAttr := fs.StableAttr{}
 		if c.IsDir() {
 			stableAttr.Mode = fuse.S_IFDIR

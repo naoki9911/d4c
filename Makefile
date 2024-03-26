@@ -15,7 +15,6 @@ ctr-cli:
 
 diff-tools:
 	go build -o diff ./cmd/diff
-	go build -o pack ./cmd/pack
 
 server:
 	go build -o server ./cmd/server
@@ -30,4 +29,4 @@ patch:
 	go build -o patch ./cmd/patch
 
 clean:
-	rm -f snapshotter ctr-cli diff pack server fuse-diff merge patch
+	rm -f snapshotter ctr-cli diff server fuse-diff merge patch

@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/hashicorp/go-version"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/algorithm"
-	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/update"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
@@ -214,7 +213,7 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 			upperDiff := DiffDatas[upperTag]
 			logger.WithFields(logrus.Fields{"lower": lowerFileName, "upper": upperDiff.FileName}).Info("merge")
 			diffDataBytes = bytes.Buffer{}
-			err = di3fs.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes)
+			err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes)
 			if err != nil {
 				logger.Errorf("failed to merge=%v", err)
 				w.WriteHeader(http.StatusInternalServerError)

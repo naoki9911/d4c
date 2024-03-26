@@ -53,19 +53,34 @@ type ImageHeader struct {
 }
 
 type FileEntry struct {
-	Name           string      `json:"name"`
-	Size           int         `json:"size"`
-	Mode           uint32      `json:"mode"`
-	UID            uint32      `json:"uid"`
-	GID            uint32      `json:"gid"`
-	DiffName       string      `json:"diffName,omitempty"`
-	Type           EntryType   `json:"type"`
-	OaqueFiles     []string    `json:"opaqueFiles,omitempty"`
-	UncompressedGz bool        `json:"uncompressedGz"`
-	RealPath       string      `json:"realPath,omitempty"`
-	Childs         []FileEntry `json:"childs" copier:"-"`
-	CompressedSize int64       `json:"compressedSize,omitempty"`
-	Offset         int64       `json:"offset,omitempty"`
+	Name           string                `json:"name"`
+	Size           int                   `json:"size"`
+	Mode           uint32                `json:"mode"`
+	UID            uint32                `json:"uid"`
+	GID            uint32                `json:"gid"`
+	Type           EntryType             `json:"type"`
+	OaqueFiles     []string              `json:"opaqueFiles,omitempty"`
+	UncompressedGz bool                  `json:"uncompressedGz"`
+	RealPath       string                `json:"realPath,omitempty"`
+	Childs         map[string]*FileEntry `json:"childs"`
+	CompressedSize int64                 `json:"compressedSize,omitempty"`
+	Offset         int64                 `json:"offset,omitempty"`
+}
+
+func (fe *FileEntry) DeepCopy() *FileEntry {
+	feJson, err := json.Marshal(fe)
+	if err != nil {
+		panic(err)
+	}
+	res := FileEntry{}
+	err = json.Unmarshal(feJson, &res)
+	if err != nil {
+		panic(err)
+	}
+
+	res.Childs = map[string]*FileEntry{}
+
+	return &res
 }
 
 func CompressWithZstd(src []byte) ([]byte, error) {
@@ -86,40 +101,6 @@ func CompressWithZstd(src []byte) ([]byte, error) {
 	}
 
 	return out.Bytes(), nil
-}
-
-func compressFileWithZstd(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	fileBytes, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := CompressWithZstd(fileBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
-
-}
-
-func PackFile(srcFilePath string, out io.Writer) (int64, error) {
-	compressed, err := compressFileWithZstd(srcFilePath)
-	if err != nil {
-		return 0, err
-	}
-	writtenSize, err := out.Write(compressed)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(writtenSize), err
 }
 
 // int64: imageBodyOffset
@@ -154,26 +135,7 @@ func LoadImage(dimgPath string) (*ImageHeader, *os.File, int64, error) {
 
 func NewFileEntry() *FileEntry {
 	return &FileEntry{
-		Childs: make([]FileEntry, 0),
-	}
-}
-
-func (fe FileEntry) Print(prefix string, isLast bool) {
-	r := "├"
-	if isLast {
-		r = "└"
-	}
-	state := "updated"
-	if fe.Type == FILE_ENTRY_FILE_NEW {
-		state = "new"
-	} else if fe.Type == FILE_ENTRY_FILE_SAME {
-		state = "same"
-	}
-	fmt.Printf("%v %s %s (%s, size=%d)\n", prefix, r, fe.Name, state, fe.Size)
-	if len(fe.Childs) > 0 {
-		for i, c := range fe.Childs {
-			c.Print(prefix+"  ", i == len(fe.Childs)-1)
-		}
+		Childs: map[string]*FileEntry{},
 	}
 }
 
@@ -224,12 +186,9 @@ func (fe *FileEntry) lookupImpl(paths []string) (*FileEntry, error) {
 		return fe, nil
 	}
 
-	for idx := range fe.Childs {
-		child := fe.Childs[idx]
-		if child.Name == paths[0] {
-			return child.lookupImpl(paths[1:])
-		}
+	child, ok := fe.Childs[paths[0]]
+	if !ok {
+		return nil, fmt.Errorf("not found")
 	}
-
-	return nil, fmt.Errorf("not found")
+	return child.lookupImpl(paths[1:])
 }

@@ -69,42 +69,8 @@ func compressWithZstd(src []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func compressFileWithZstd(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	fileBytes, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := compressWithZstd(fileBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
-
-}
-
 func packBytes(b []byte, out *bytes.Buffer) (int64, error) {
 	compressed, err := compressWithZstd(b)
-	if err != nil {
-		return 0, err
-	}
-	writtenSize, err := out.Write(compressed)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(writtenSize), err
-}
-
-func packFile(srcFilePath string, out *bytes.Buffer) (int64, error) {
-	compressed, err := compressFileWithZstd(srcFilePath)
 	if err != nil {
 		return 0, err
 	}

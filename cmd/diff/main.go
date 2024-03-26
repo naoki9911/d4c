@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -18,7 +17,6 @@ var logger = log.G(context.TODO())
 func main() {
 	logger.Logger.SetLevel(logrus.WarnLevel)
 	if len(os.Args) < 6 {
-		fmt.Println("diff base-dir new-dir output-dir json-file mode [benchmark]")
 		fmt.Println("diff dimg base-dimg new-dimg output-dimg mode [benchmark]")
 		os.Exit(1)
 	}
@@ -57,37 +55,8 @@ func main() {
 			panic(err)
 		}
 	} else {
-		baseDir := os.Args[1]
-		newDir := os.Args[2]
-		outputDir := os.Args[3]
-		jsonPath := os.Args[4]
-		mode = os.Args[5]
-		if mode != "binary-diff" && mode != "file-diff" {
-			fmt.Println("mode is \"binary-diff\" or \"file-diff\"")
-			os.Exit(1)
-		}
-		base = baseDir
-		new = newDir
-
-		os.RemoveAll(outputDir)
-		os.RemoveAll(jsonPath)
-
-		entry, err := image.GenerateDiffFromDir(baseDir, newDir, outputDir, mode == "binary-diff", baseDir != "")
-		if err != nil {
-			panic(err)
-		}
-
-		//entry.print("", true)
-		entryJson, err := json.MarshalIndent(entry, "", "  ")
-		if err != nil {
-			panic(err)
-		}
-		jsonFile, err := os.Create(jsonPath)
-		if err != nil {
-			panic(err)
-		}
-		defer jsonFile.Close()
-		jsonFile.Write(entryJson)
+		fmt.Println("only 'dimg' mode is allowed")
+		os.Exit(1)
 	}
 
 	if benchmarkEnabled {

@@ -234,15 +234,9 @@ func Action(c *cli.Context) error {
 	}
 	defer os.RemoveAll(tempDiffDir)
 
-	logger.Info("generating Di3FS file entries")
-	entry, err := di3fsImage.GenerateDiffFromDir("", tempDir, tempDiffDir, true, false)
-	if err != nil {
-		return fmt.Errorf("failed to generate diffs: %v", err)
-	}
-
 	logger.Info("packing dimg")
 	dimgPath := filepath.Join(outputPath, "image.dimg")
-	err = di3fsImage.PackDimg(logger, tempDiffDir, entry, "", dimgPath)
+	err = di3fsImage.PackDir(tempDir, dimgPath)
 	if err != nil {
 		return fmt.Errorf("failed to pack dimg: %v", err)
 	}

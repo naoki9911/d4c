@@ -6,7 +6,6 @@ set -eu
 ROOT_DIR=$(cd $(dirname $0)/../; pwd)
 BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
 BIN_DIFF="$ROOT_DIR/diff"
-BIN_PACK="$ROOT_DIR/pack"
 BIN_PATCH="$ROOT_DIR/patch"
 BIN_FUSE="$ROOT_DIR/fuse-diff"
 BIN_MERGE="$ROOT_DIR/merge"

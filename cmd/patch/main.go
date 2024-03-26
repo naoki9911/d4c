@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -65,12 +64,10 @@ func applyFilePatchForGz(baseFilePath, newFilePath string, patch io.Reader) erro
 	return nil
 }
 
-func applyPatch(basePath, newPath, patchPath string, dirEntry di3fs.FileEntry, image *os.File, imageStartOffset int64, isBase bool) error {
+func applyPatch(basePath, newPath string, dirEntry *di3fs.FileEntry, image *os.File, imageStartOffset int64, isBase bool) error {
 	fName := dirEntry.Name
-	isImage := image != nil
 	baseFilePath := path.Join(basePath, fName)
 	newFilePath := path.Join(newPath, fName)
-	patchFilePath := path.Join(patchPath, dirEntry.DiffName)
 
 	if isBase && !dirEntry.IsDir() && !dirEntry.IsSymlink() && !dirEntry.IsNew() {
 		return fmt.Errorf("invalid base image %q", newFilePath)
@@ -97,13 +94,12 @@ func applyPatch(basePath, newPath, patchPath string, dirEntry di3fs.FileEntry, i
 			return err
 		}
 	} else if dirEntry.IsDir() {
-		patchFilePath = path.Join(patchPath, dirEntry.Name)
 		err := os.Mkdir(newFilePath, os.ModePerm)
 		if err != nil {
 			return err
 		}
 		for _, c := range dirEntry.Childs {
-			err = applyPatch(baseFilePath, newFilePath, patchFilePath, c, image, imageStartOffset, isBase)
+			err = applyPatch(baseFilePath, newFilePath, c, image, imageStartOffset, isBase)
 			if err != nil {
 				return err
 			}
@@ -117,51 +113,35 @@ func applyPatch(basePath, newPath, patchPath string, dirEntry di3fs.FileEntry, i
 		//if strings.Contains(dirEntry.Name, ".wh") {
 		//	fmt.Println(newFilePath)
 		//}
-		if isImage {
-			logger.Debugf("copy %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
-			patchBytes := make([]byte, dirEntry.CompressedSize)
-			_, err := image.ReadAt(patchBytes, dirEntry.Offset+imageStartOffset)
-			if err != nil {
-				return err
-			}
-			patchBuf := bytes.NewBuffer(patchBytes)
-			patchReader, err := zstd.NewReader(patchBuf)
-			if err != nil {
-				return err
-			}
-			defer patchReader.Close()
-
-			newFile, err := os.Create(newFilePath)
-			if err != nil {
-				return err
-			}
-			defer newFile.Close()
-
-			io.Copy(newFile, patchReader)
-		} else {
-			err := cp.Copy(patchFilePath, newFilePath)
-			if err != nil {
-				return err
-			}
+		logger.Debugf("copy %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
+		patchBytes := make([]byte, dirEntry.CompressedSize)
+		_, err := image.ReadAt(patchBytes, dirEntry.Offset+imageStartOffset)
+		if err != nil {
+			return err
 		}
+		patchBuf := bytes.NewBuffer(patchBytes)
+		patchReader, err := zstd.NewReader(patchBuf)
+		if err != nil {
+			return err
+		}
+		defer patchReader.Close()
+
+		newFile, err := os.Create(newFilePath)
+		if err != nil {
+			return err
+		}
+		defer newFile.Close()
+
+		io.Copy(newFile, patchReader)
 	} else if dirEntry.Type == di3fs.FILE_ENTRY_FILE_DIFF {
 		var patchReader io.Reader
-		if isImage {
-			logger.Debugf("applying diff to %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
-			patchBytes := make([]byte, dirEntry.CompressedSize)
-			_, err := image.ReadAt(patchBytes, dirEntry.Offset+imageStartOffset)
-			if err != nil {
-				return err
-			}
-			patchReader = bytes.NewBuffer(patchBytes)
-		} else {
-			patchFile, err := os.Open(patchFilePath)
-			if err != nil {
-				return err
-			}
-			defer patchFile.Close()
-			patchReader = patchFile
+		logger.Debugf("applying diff to %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
+		patchBytes := make([]byte, dirEntry.CompressedSize)
+		_, err := image.ReadAt(patchBytes, dirEntry.Offset+imageStartOffset)
+		if err != nil {
+			return err
 		}
+		patchReader = bytes.NewBuffer(patchBytes)
 		if dirEntry.UncompressedGz {
 			err := applyFilePatchForGz(baseFilePath, newFilePath, patchReader)
 			if err != nil {
@@ -194,14 +174,17 @@ func applyPatch(basePath, newPath, patchPath string, dirEntry di3fs.FileEntry, i
 func main() {
 	logger.Logger.SetLevel(logrus.WarnLevel)
 	if len(os.Args) < 5 {
-		fmt.Println("diff dir base-dir new-dir [patch-dir|patch-img] json-file")
-		fmt.Println("diff dimg base-dir new-dir patch-img [benchmark]")
+		fmt.Println("diff dimg base-dir new-dir patch-dimg [benchmark]")
 		os.Exit(1)
 	}
+
 	mode := os.Args[1]
+	if mode != "dimg" {
+		logger.Fatal("only dimg mode is allowed")
+	}
 	baseDir := os.Args[2]
 	newDir := os.Args[3]
-	patchDir := os.Args[4]
+	patchDimg := os.Args[4]
 
 	os.RemoveAll(newDir)
 
@@ -217,11 +200,11 @@ func main() {
 			defer b.Close()
 		}
 		start := time.Now()
-		imageHeader, imageFile, curOffset, err := di3fs.LoadImage(patchDir)
+		imageHeader, imageFile, curOffset, err := di3fs.LoadImage(patchDimg)
 		if err != nil {
 			panic(err)
 		}
-		err = applyPatch(baseDir, newDir, patchDir, imageHeader.FileEntry, imageFile, curOffset, imageHeader.BaseId == "")
+		err = applyPatch(baseDir, newDir, &imageHeader.FileEntry, imageFile, curOffset, imageHeader.BaseId == "")
 		if err != nil {
 			panic(err)
 		}
@@ -239,21 +222,6 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-		}
-	} else {
-		entry := di3fs.FileEntry{}
-		jsonPath := os.Args[5]
-		jsonRaw, err := os.ReadFile(jsonPath)
-		if err != nil {
-			panic(err)
-		}
-		err = json.Unmarshal(jsonRaw, &entry)
-		if err != nil {
-			panic(err)
-		}
-		err = applyPatch(baseDir, newDir, patchDir, entry, nil, 0, false)
-		if err != nil {
-			panic(err)
 		}
 	}
 }
