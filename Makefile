@@ -1,6 +1,6 @@
-.PHONY: snapshotter ctr-cli diff-tools server fuse-diff
+.PHONY: snapshotter ctr-cli server fuse-diff
 
-all: snapshotter ctr-cli diff-tools server fuse-diff
+all: snapshotter ctr-cli server fuse-diff
 
 run:
 	make clean
@@ -13,9 +13,6 @@ snapshotter:
 ctr-cli:
 	go build -o ctr-cli ./cmd/ctr-cli
 
-diff-tools:
-	go build -o diff ./cmd/diff
-
 server:
 	go build -o server ./cmd/server
 
@@ -23,4 +20,4 @@ fuse-diff:
 	go build -o fuse-diff ./cmd/fuse-diff
 
 clean:
-	rm -f snapshotter ctr-cli diff server fuse-diff
+	rm -f snapshotter ctr-cli server fuse-diff

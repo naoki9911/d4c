@@ -5,7 +5,6 @@ set -eu
 
 ROOT_DIR=$(cd $(dirname $0)/../; pwd)
 BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
-BIN_DIFF="$ROOT_DIR/diff"
 BIN_FUSE="$ROOT_DIR/fuse-diff"
 
 TEST_SCRIPT=$1
@@ -49,7 +48,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_DIFF dimg $LOWER.dimg $UPPER.dimg diff_$DIFF_NAME.dimg binary-diff benchmark
+		$BIN_CTR_CLI diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_$DIFF_NAME.dimg --mode=binary-diff --benchmark
 	done
 
 	# packing diff data
@@ -79,7 +78,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME file-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_DIFF dimg $LOWER.dimg $UPPER.dimg diff_file_$DIFF_NAME.dimg file-diff benchmark
+		$BIN_CTR_CLI diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark
 	done
 
 	# packing diff data and test it
@@ -109,14 +108,14 @@ fusermount3 -u /tmp/fuse
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED binary-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_DIFF dimg $IMAGE_LOWER.dimg $IMAGE_UPPER.dimg diff_$MERGED.dimg binary-diff benchmark
+	$BIN_CTR_CLI diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_$MERGED.dimg --mode=binary-diff --benchmark
 done
 ls -l diff_$MERGED.dimg
 
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED file-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_DIFF dimg $IMAGE_LOWER.dimg $IMAGE_UPPER.dimg diff_file_$MERGED.dimg file-diff benchmark
+	$BIN_CTR_CLI diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_file_$MERGED.dimg --mode=file-diff --benchmark
 done
 ls -l diff_file_$MERGED.dimg
 
