@@ -35,7 +35,7 @@ for ((i=0; i < ${#IMAGE_VERSIONS[@]}; i++));do
 	rm -rf ./$IMAGE/dev
 
 	mv ./image-$IMAGE/image.dimg $IMAGE.dimg
-	$BIN_CTR_CLI patch --outDir=./$IMAGE-base-patched --diffDimg=./$IMAGE.dimg
+	$BIN_CTR_CLI dimg patch --outDir=./$IMAGE-base-patched --diffDimg=./$IMAGE.dimg
 	diff -r $IMAGE $IMAGE-base-patched --no-dereference
 done
 
@@ -58,7 +58,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark patch $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
+		$BIN_CTR_CLI dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
 
@@ -83,7 +83,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 
 	# packing diff data and test it
 	ls -l diff_file_$DIFF_NAME.dimg
-	$BIN_CTR_CLI patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_file_$DIFF_NAME.dimg
+	$BIN_CTR_CLI dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_file_$DIFF_NAME.dimg
 	diff -r $UPPER $UPPER-patched --no-dereference
 done
 
@@ -97,7 +97,7 @@ for ((j=0; j < $RUN_NUM; j++));do
 done
 
 echo "Testing merged $MERGED"
-$BIN_CTR_CLI patch --baseDir=./$IMAGE_LOWER --outDir=./$IMAGE_UPPER-merged --diffDimg=./diff_merged_$MERGED.dimg
+$BIN_CTR_CLI dimg patch --baseDir=./$IMAGE_LOWER --outDir=./$IMAGE_UPPER-merged --diffDimg=./diff_merged_$MERGED.dimg
 diff -r $IMAGE_UPPER $IMAGE_UPPER-merged --no-dereference
 ls -l diff_merged_$MERGED.dimg
 $BIN_FUSE --baseDimg=./$IMAGE_LOWER.dimg --diffDimg=./diff_merged_$MERGED.dimg /tmp/fuse >/dev/null 2>&1 &

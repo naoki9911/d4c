@@ -37,7 +37,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark patch $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
+		$BIN_CTR_CLI dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
 
@@ -54,4 +54,3 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 		sleep 2
 	done
 done
-

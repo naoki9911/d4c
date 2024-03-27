@@ -33,13 +33,38 @@ func NewApp() *cli.App {
 	app.Flags = []cli.Flag{}
 	app.Commands = []*cli.Command{
 		convert.Command(),
+		dimgCommand(),
+		cdimgCommand(),
 		pack.Command(),
 		load.Command(),
 		pull.Command(),
-		patch.Command(),
 		merge.Command(),
 		diff.Command(),
 	}
 
 	return app
+}
+
+func dimgCommand() *cli.Command {
+	cmd := cli.Command{
+		Name:  "dimg",
+		Usage: "Delta image (dimg) related commands",
+		Flags: []cli.Flag{},
+		Subcommands: []*cli.Command{
+			patch.DimgCommand(),
+		},
+	}
+	return &cmd
+}
+
+func cdimgCommand() *cli.Command {
+	cmd := cli.Command{
+		Name:  "cdimg",
+		Usage: "Container delta image (cdimg) related commands",
+		Flags: []cli.Flag{},
+		Subcommands: []*cli.Command{
+			patch.CdimgCommand(),
+		},
+	}
+	return &cmd
 }
