@@ -37,7 +37,10 @@ func writeMemProfile(fn string, sigs <-chan os.Signal) {
 			log.Printf("Create: %v", err)
 			continue
 		}
-		pprof.WriteHeapProfile(f)
+		err = pprof.WriteHeapProfile(f)
+		if err != nil {
+			log.Printf("failed WriteHeapProfile: %v", err)
+		}
 		if err := f.Close(); err != nil {
 			log.Printf("close %v", err)
 		}
@@ -83,7 +86,10 @@ func main() {
 			fmt.Println(err)
 			os.Exit(3)
 		}
-		pprof.StartCPUProfile(f)
+		err = pprof.StartCPUProfile(f)
+		if err != nil {
+			log.Fatalf("failed to start CPUProfile: %v", err)
+		}
 		defer pprof.StopCPUProfile()
 	}
 	if *memprofile != "" {

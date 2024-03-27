@@ -36,8 +36,11 @@ var Flags = []cli.Flag{
 
 func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, image *image.Di3FSImage) error {
 	cs := snClient.CtrClient.ContentStore()
-	cs.Delete(ctx, image.Header.ManifestDigest)
-	err := content.WriteBlob(ctx, cs, image.Header.ManifestDigest.Hex(), bytes.NewReader(image.ManifestBytes),
+	err := cs.Delete(ctx, image.Header.ManifestDigest)
+	if err != nil {
+		log.G(ctx).Infof("%s is already removed: %v", image.Header.ManifestDigest, err)
+	}
+	err = content.WriteBlob(ctx, cs, image.Header.ManifestDigest.Hex(), bytes.NewReader(image.ManifestBytes),
 		v1.Descriptor{
 			Size:   int64(len(image.ManifestBytes)),
 			Digest: image.Header.ManifestDigest,

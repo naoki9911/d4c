@@ -2,7 +2,6 @@ package image
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -96,36 +95,6 @@ func CompressWithZstd(src []byte) ([]byte, error) {
 	}
 
 	return out.Bytes(), nil
-}
-
-// int64: imageBodyOffset
-func LoadImage(dimgPath string) (*ImageHeader, *os.File, int64, error) {
-	imageFile, err := os.Open(dimgPath)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	curOffset := int64(0)
-	bs := make([]byte, 4)
-	_, err = imageFile.ReadAt(bs, curOffset)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	curOffset += 4
-
-	compressedHeaderSize := binary.LittleEndian.Uint32(bs)
-	compressedHeader := make([]byte, compressedHeaderSize)
-	_, err = imageFile.ReadAt(compressedHeader, curOffset)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	curOffset += int64(compressedHeaderSize)
-	imageHeader, err := UnmarshalJsonFromCompressed[ImageHeader](compressedHeader)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	return imageHeader, imageFile, curOffset, nil
 }
 
 func NewFileEntry() *FileEntry {

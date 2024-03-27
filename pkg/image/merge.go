@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -38,7 +37,7 @@ var ErrInvalidMagic = errors.New("Invalid magic")
 var sizeEncoding = binary.BigEndian
 var magicText = []byte("ENDSLEY/BSDIFF43")
 
-func ReadHeader(r io.Reader) (size uint64, err error) {
+func readHeader(r io.Reader) (size uint64, err error) {
 	magicBuf := make([]byte, len(magicText))
 	n, err := r.Read(magicBuf)
 	if err != nil {
@@ -54,7 +53,7 @@ func ReadHeader(r io.Reader) (size uint64, err error) {
 	return
 }
 
-func WriteHeader(w io.Writer, size uint64) error {
+func writeHeader(w io.Writer, size uint64) error {
 	_, err := w.Write(magicText)
 	if err != nil {
 		return err
@@ -69,7 +68,7 @@ func WriteHeader(w io.Writer, size uint64) error {
 }
 
 func readPatch(reader io.Reader) ([]DiffBlock, uint64, error) {
-	newLen, err := ReadHeader(reader)
+	newLen, err := readHeader(reader)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -95,7 +94,7 @@ func readPatch(reader io.Reader) ([]DiffBlock, uint64, error) {
 }
 
 func writePatch(w io.Writer, size uint64, blocks []DiffBlock) error {
-	err := WriteHeader(w, size)
+	err := writeHeader(w, size)
 	if err != nil {
 		return err
 	}
@@ -797,43 +796,9 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) error {
 		FileEntry: *mergedEntry,
 	}
 
-	jsonBytes, err := json.Marshal(header)
+	err = WriteDimg(merged, &header, &tmp)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to write to dimg: %v", err)
 	}
-
-	// encode header
-	var headerZstdBuffer bytes.Buffer
-	headerZstd, err := zstd.NewWriter(&headerZstdBuffer)
-	if err != nil {
-		panic(err)
-	}
-	_, err = headerZstd.Write(jsonBytes)
-	if err != nil {
-		panic(err)
-	}
-	err = headerZstd.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, uint32(len(headerZstdBuffer.Bytes())))
-
-	// Image format
-	// [ length of compressed image header (4bit)]
-	// [ compressed image header ]
-	// [ content body ]
-
-	_, err = merged.Write(append(bs, headerZstdBuffer.Bytes()...))
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = io.Copy(merged, &tmp)
-	if err != nil {
-		panic(err)
-	}
-
 	return nil
 }

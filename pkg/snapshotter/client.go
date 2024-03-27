@@ -29,7 +29,10 @@ func NewClient() (*Client, error) {
 
 	c.SnClient = c.CtrClient.SnapshotService("di3fs")
 	c.SnImageStorePath = filepath.Join(c.SnRootPath, "images")
-	os.MkdirAll(c.SnImageStorePath, 0o644)
+	err = os.MkdirAll(c.SnImageStorePath, 0o644)
+	if err != nil {
+		return nil, err
+	}
 
 	return c, nil
 }

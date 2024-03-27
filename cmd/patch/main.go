@@ -132,7 +132,10 @@ func applyPatch(basePath, newPath string, dirEntry *image.FileEntry, img *image.
 		}
 		defer newFile.Close()
 
-		io.Copy(newFile, patchReader)
+		_, err = io.Copy(newFile, patchReader)
+		if err != nil {
+			return err
+		}
 	} else if dirEntry.Type == image.FILE_ENTRY_FILE_DIFF {
 		var patchReader io.Reader
 		logger.Debugf("applying diff to %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)

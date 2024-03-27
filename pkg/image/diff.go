@@ -3,14 +3,11 @@ package image
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/icedream/go-bsdiff"
-	"github.com/klauspost/compress/zstd"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 )
 
@@ -65,42 +62,9 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 		FileEntry: newDimg.imageHeader.FileEntry,
 	}
 
-	jsonBytes, err := json.Marshal(header)
+	err = WriteDimg(diffFile, &header, &diffOut)
 	if err != nil {
-		panic(err)
-	}
-
-	// encode header
-	var headerZstdBuffer bytes.Buffer
-	headerZstd, err := zstd.NewWriter(&headerZstdBuffer)
-	if err != nil {
-		panic(err)
-	}
-	_, err = headerZstd.Write(jsonBytes)
-	if err != nil {
-		panic(err)
-	}
-	err = headerZstd.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, uint32(len(headerZstdBuffer.Bytes())))
-
-	// Image format
-	// [ length of compressed image header (4bit)]
-	// [ compressed image header ]
-	// [ content body ]
-
-	_, err = diffFile.Write(append(bs, headerZstdBuffer.Bytes()...))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(diffFile, &diffOut)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to write dimg: %v", err)
 	}
 
 	return nil

@@ -54,7 +54,7 @@ func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDiges
 	})
 	err = ss.Commit(ctx, dimgDigest.String(), randId, opts, optsWithMount)
 	if err != nil {
-		log.G(ctx).Errorf("failed to commit snapshot :%w", err)
+		log.G(ctx).Errorf("failed to commit snapshot : %v", err)
 		return err
 	}
 	log.G(ctx).Debug("commit done")

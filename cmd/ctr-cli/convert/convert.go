@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -198,7 +197,10 @@ func Action(c *cli.Context) error {
 		return err
 	}
 	defer manifestFile.Close()
-	manifestFile.Write(manifestBytes)
+	_, err = manifestFile.Write(manifestBytes)
+	if err != nil {
+		return err
+	}
 
 	logger.Infof("manifest is written to %q", manifestPath)
 
@@ -207,7 +209,7 @@ func Action(c *cli.Context) error {
 	}
 
 	// convert layer.tar to dimg
-	tempDir, err := ioutil.TempDir("/tmp/ctr-cli", "*")
+	tempDir, err := os.MkdirTemp("/tmp/ctr-cli", "*")
 	if err != nil {
 		return err
 	}
@@ -228,7 +230,7 @@ func Action(c *cli.Context) error {
 		}
 	}
 
-	tempDiffDir, err := ioutil.TempDir("/tmp/ctr-cli", "*")
+	tempDiffDir, err := os.MkdirTemp("/tmp/ctr-cli", "*")
 	if err != nil {
 		return err
 	}

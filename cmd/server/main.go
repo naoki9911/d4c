@@ -233,7 +233,12 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
-				tempFile.Write(diffDataBytes.Bytes())
+				_, err = tempFile.Write(diffDataBytes.Bytes())
+				if err != nil {
+					logger.Errorf("failed to write to tmp file: %v", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 				lowerFileName = tempFile.Name()
 				logger.Infof("temp file saved at %s", lowerFileName)
 				tempFile.Close()
@@ -289,5 +294,8 @@ func main() {
 	http.HandleFunc("/diffData/add", handlePostDiffData)
 	http.HandleFunc("/diffData/cleanup", handleDeleteDiffData)
 	logger.Info("started")
-	http.ListenAndServe(":8081", nil)
+	err = http.ListenAndServe(":8081", nil)
+	if err != nil {
+		logger.Fatalf("failed to start server: %v", err)
+	}
 }

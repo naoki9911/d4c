@@ -182,7 +182,12 @@ func (o *snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, err
 	if err != nil {
 		return snapshots.Info{}, err
 	}
-	defer t.Rollback()
+	defer func() {
+		err = t.Rollback()
+		if err != nil {
+			log.G(ctx).Errorf("failed to Rollback")
+		}
+	}()
 	_, info, _, err := storage.GetInfo(ctx, key)
 	if err != nil {
 		return snapshots.Info{}, err
@@ -203,7 +208,10 @@ func (o *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 
 	info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
 	if err != nil {
-		t.Rollback()
+		err = t.Rollback()
+		if err != nil {
+			log.G(ctx).Errorf("failed to Rollback")
+		}
 		return snapshots.Info{}, err
 	}
 
@@ -229,7 +237,10 @@ func (o *snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, e
 		return snapshots.Usage{}, err
 	}
 	id, info, usage, err := storage.GetInfo(ctx, key)
-	t.Rollback() // transaction no longer needed at this point.
+	errRB := t.Rollback() // transaction no longer needed at this point.
+	if errRB != nil {
+		log.G(ctx).Errorf("failed to Rollback")
+	}
 
 	if err != nil {
 		return snapshots.Usage{}, err
@@ -326,7 +337,10 @@ func (o *snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 		return nil, err
 	}
 	s, err := storage.GetSnapshot(ctx, key)
-	t.Rollback()
+	errRB := t.Rollback()
+	if errRB != nil {
+		log.G(ctx).Errorf("failed to Rollback: %v", err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active mount: %w", err)
 	}
@@ -431,7 +445,12 @@ func (o *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...str
 	if err != nil {
 		return err
 	}
-	defer t.Rollback()
+	defer func() {
+		errRB := t.Rollback()
+		if errRB != nil {
+			log.G(ctx).Errorf("failed to Rollback: %v", err)
+		}
+	}()
 	return storage.WalkInfo(ctx, fn, fs...)
 }
 
@@ -466,7 +485,12 @@ func (o *snapshotter) cleanupDirectories(ctx context.Context, cleanupCommitted b
 		return nil, err
 	}
 
-	defer t.Rollback()
+	defer func() {
+		errRB := t.Rollback()
+		if errRB != nil {
+			log.G(ctx).Errorf("failed to Rollback: %v", err)
+		}
+	}()
 	return o.getCleanupDirectories(ctx, t, cleanupCommitted)
 }
 
@@ -702,7 +726,12 @@ func (o *snapshotter) prepareRemoteSnapshot(ctx context.Context, key string, lab
 	if err != nil {
 		return err
 	}
-	defer t.Rollback()
+	defer func() {
+		errRB := t.Rollback()
+		if errRB != nil {
+			log.G(ctx).Errorf("failed to Rollback: %v", err)
+		}
+	}()
 	id, _, _, err := storage.GetInfo(ctx, key)
 	if err != nil {
 		return err
@@ -725,7 +754,12 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 		log.G(ctx).WithError(err).Warn("failed to get transaction")
 		return false
 	}
-	defer t.Rollback()
+	defer func() {
+		errRB := t.Rollback()
+		if errRB != nil {
+			log.G(ctx).Errorf("failed to Rollback: %v", err)
+		}
+	}()
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	for cKey := key; cKey != ""; {

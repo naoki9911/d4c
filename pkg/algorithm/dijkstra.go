@@ -23,12 +23,12 @@ func NewNode(name string) *Node {
 }
 
 // ノードに次の接続先を示したエッジを追加する
-func (self *Node) AddEdge(edge *Edge) {
-	self.edges = append(self.edges, edge)
+func (n *Node) AddEdge(edge *Edge) {
+	n.edges = append(n.edges, edge)
 }
 
-func (self *Node) GetName() string {
-	return self.name
+func (n *Node) GetName() string {
+	return n.name
 }
 
 // エッジ
@@ -184,29 +184,4 @@ func (self *DirectedGraph) nextNode() (next *Node, err error) {
 	}
 
 	return
-}
-
-func main() {
-	// 有向グラフを作る
-	g := NewDirectedGraph()
-
-	// グラフを定義していく
-	g.Add("1.23.1", "1.23.2", 1)
-	g.Add("1.23.2", "1.23.3", 1)
-	g.Add("1.23.3", "1.23.4", 1)
-	g.Add("1.23.1", "1.23.3", 1)
-
-	// "s" ノードから "z" ノードへの最短経路を得る
-	path, err := g.ShortestPath("1.23.1", "1.23.4")
-
-	// 経路が見つからなければ終了
-	if err != nil {
-		fmt.Println("Goal not found")
-		return
-	}
-
-	// 見つかった経路からノードとコストを表示する
-	for _, node := range path {
-		fmt.Printf("ノード: %v, コスト: %v\n", node.name, node.cost)
-	}
 }

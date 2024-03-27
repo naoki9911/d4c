@@ -175,10 +175,13 @@ func (c *Client) startSnapshotter() {
 		WithField("socket", c.snSocketPath).
 		Info("di3fs snapshotter service started")
 
-	c.snSnapshotter.Walk(c.ctx, func(ctx context.Context, i snapshots.Info) error {
+	err = c.snSnapshotter.Walk(c.ctx, func(ctx context.Context, i snapshots.Info) error {
 		log.G(ctx).WithField("snapshots.Info", i).Info("walking")
 		return nil
 	})
+	if err != nil {
+		log.G(c.ctx).Warnf("failed to walk snapshots: %v", err)
+	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

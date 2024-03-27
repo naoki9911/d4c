@@ -2,14 +2,11 @@ package image
 
 import (
 	"bytes"
-	"encoding/binary"
-	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
-
-	"github.com/klauspost/compress/zstd"
 )
 
 func compressFileWithZstd(path string) ([]byte, error) {
@@ -33,7 +30,7 @@ func compressFileWithZstd(path string) ([]byte, error) {
 
 }
 
-func PackFile(srcFilePath string, out io.Writer) (int64, error) {
+func packFile(srcFilePath string, out io.Writer) (int64, error) {
 	compressed, err := compressFileWithZstd(srcFilePath)
 	if err != nil {
 		return 0, err
@@ -117,7 +114,7 @@ func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) 
 
 		logger.Debugf("NewFile Name:%v\n", dirFilePath)
 		entry.Offset = int64(len(outBody.Bytes()))
-		writtenSize, err := PackFile(dirFilePath, outBody)
+		writtenSize, err := packFile(dirFilePath, outBody)
 		if err != nil {
 			return err
 		}
@@ -180,42 +177,9 @@ func PackDir(dirPath, outDimgPath string) error {
 		FileEntry: *entry,
 	}
 
-	jsonBytes, err := json.Marshal(header)
+	err = WriteDimg(outDimg, &header, &outBody)
 	if err != nil {
-		panic(err)
-	}
-
-	// encode header
-	var headerZstdBuffer bytes.Buffer
-	headerZstd, err := zstd.NewWriter(&headerZstdBuffer)
-	if err != nil {
-		panic(err)
-	}
-	_, err = headerZstd.Write(jsonBytes)
-	if err != nil {
-		panic(err)
-	}
-	err = headerZstd.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, uint32(len(headerZstdBuffer.Bytes())))
-
-	// Image format
-	// [ length of compressed image header (4bytes)]
-	// [ compressed image header ]
-	// [ content body ]
-
-	_, err = outDimg.Write(append(bs, headerZstdBuffer.Bytes()...))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(outDimg, &outBody)
-	if err != nil {
-		return err
+		return fmt.Errorf("faield to write dimg: %v", err)
 	}
 	return nil
 }
