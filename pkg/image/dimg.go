@@ -11,13 +11,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-type ImageHeader struct {
+type DimgHeader struct {
 	BaseId    string    `json:"baseID"`
 	FileEntry FileEntry `json:"fileEntry"`
 }
 
 type DimgFile struct {
-	imageHeader *ImageHeader
+	imageHeader *DimgHeader
 	file        *os.File
 	bodyOffset  int64
 }
@@ -43,7 +43,7 @@ func OpenDimgFile(path string) (*DimgFile, error) {
 		return nil, err
 	}
 	curOffset += int64(compressedHeaderSize)
-	imageHeader, err := UnmarshalJsonFromCompressed[ImageHeader](compressedHeader)
+	imageHeader, err := UnmarshalJsonFromCompressed[DimgHeader](compressedHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func OpenDimgFile(path string) (*DimgFile, error) {
 	return df, nil
 }
 
-func (df *DimgFile) ImageHeader() *ImageHeader {
+func (df *DimgFile) Header() *DimgHeader {
 	return df.imageHeader
 }
 
@@ -73,8 +73,8 @@ func (df *DimgFile) ReadAt(b []byte, off int64) (int, error) {
 	return df.file.ReadAt(b, df.bodyOffset+off)
 }
 
-func WriteDimg(outDimg io.Writer, imageHeader *ImageHeader, body *bytes.Buffer) error {
-	jsonBytes, err := json.Marshal(imageHeader)
+func WriteDimg(outDimg io.Writer, header *DimgHeader, body *bytes.Buffer) error {
+	jsonBytes, err := json.Marshal(header)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ImageHeader: %v", err)
 	}

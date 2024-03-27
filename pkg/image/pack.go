@@ -172,7 +172,7 @@ func PackDir(dirPath, outDimgPath string) error {
 		return err
 	}
 
-	header := ImageHeader{
+	header := DimgHeader{
 		BaseId:    "",
 		FileEntry: *entry,
 	}

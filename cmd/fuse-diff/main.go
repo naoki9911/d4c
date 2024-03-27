@@ -117,7 +117,7 @@ func main() {
 	}
 	var baseImageFile *image.DimgFile = nil
 
-	baseNeeded := diffImageFile.ImageHeader().BaseId != ""
+	baseNeeded := diffImageFile.Header().BaseId != ""
 	if baseNeeded {
 		var baseDimgAbs string
 		if *baseDimg != "" {
@@ -127,7 +127,7 @@ func main() {
 			}
 		} else {
 			imageStore, _ := filepath.Split(diffDimgAbs)
-			baseDimgAbs = filepath.Join(imageStore, diffImageFile.ImageHeader().BaseId+".dimg")
+			baseDimgAbs = filepath.Join(imageStore, diffImageFile.Header().BaseId+".dimg")
 		}
 		baseImageFile, err = image.OpenDimgFile(baseDimgAbs)
 		if err != nil {

@@ -69,7 +69,7 @@ func Action(c *cli.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	imageHeader := imageFile.ImageHeader()
+	imageHeader := imageFile.Header()
 	err = image.ApplyPatch(baseDir, outDir, &imageHeader.FileEntry, imageFile, imageHeader.BaseId == "")
 	if err != nil {
 		panic(err)

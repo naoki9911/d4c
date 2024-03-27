@@ -783,16 +783,16 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) error {
 	}
 	defer upperImgFile.Close()
 	tmp := bytes.Buffer{}
-	mergedEntry := upperImgFile.ImageHeader().FileEntry.DeepCopy()
-	lowerFE := &lowerImgFile.ImageHeader().FileEntry
-	upperFE := &upperImgFile.ImageHeader().FileEntry
+	mergedEntry := upperImgFile.Header().FileEntry.DeepCopy()
+	lowerFE := &lowerImgFile.Header().FileEntry
+	upperFE := &upperImgFile.Header().FileEntry
 	err = MergeDiffDimg(lowerFE, upperFE, lowerFE.Name, upperFE.Name, lowerImgFile, upperImgFile, mergedEntry, &tmp)
 	if err != nil {
 		panic(err)
 	}
 
-	header := ImageHeader{
-		BaseId:    lowerImgFile.ImageHeader().BaseId,
+	header := DimgHeader{
+		BaseId:    lowerImgFile.Header().BaseId,
 		FileEntry: *mergedEntry,
 	}
 

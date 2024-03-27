@@ -285,9 +285,9 @@ func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *D
 func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile) (Di3fsRoot, error) {
 	baseFEs := make([]*image.FileEntry, 0)
 	for i := range baseImages {
-		baseFEs = append(baseFEs, &baseImages[i].ImageHeader().FileEntry)
+		baseFEs = append(baseFEs, &baseImages[i].Header().FileEntry)
 	}
-	rootNode := newNode(&diffImage.ImageHeader().FileEntry, baseFEs, nil)
+	rootNode := newNode(&diffImage.Header().FileEntry, baseFEs, nil)
 	root := Di3fsRoot{
 		baseImageFiles: baseImages,
 		diffImageFile:  diffImage,
@@ -319,7 +319,7 @@ func Do(diffImagePath, mountPath string) error {
 		panic(err)
 	}
 
-	baseImageId := diffImageFile.ImageHeader().BaseId
+	baseImageId := diffImageFile.Header().BaseId
 	for baseImageId != "" {
 		imageStore, _ := filepath.Split(diffImagePathAbs)
 		baseImagePath := filepath.Join(imageStore, baseImageId+".dimg")
@@ -328,7 +328,7 @@ func Do(diffImagePath, mountPath string) error {
 			panic(err)
 		}
 		baseImageFiles = append(baseImageFiles, baseImageFile)
-		baseImageId = baseImageFile.ImageHeader().BaseId
+		baseImageId = baseImageFile.Header().BaseId
 		log.Infof("baseImage %s is loaded", baseImageId)
 	}
 

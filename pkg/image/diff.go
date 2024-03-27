@@ -40,7 +40,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer diffFile.Close()
 
 	diffOut := bytes.Buffer{}
-	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.ImageHeader().FileEntry, &newDimg.ImageHeader().FileEntry, &diffOut, isBinaryDiff)
+	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	}
 	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
 
-	header := ImageHeader{
+	header := DimgHeader{
 		BaseId:    baseId,
 		FileEntry: newDimg.imageHeader.FileEntry,
 	}
