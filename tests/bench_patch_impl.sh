@@ -8,7 +8,6 @@ ROOT_DIR=$(cd $(dirname $0)/../; pwd)
 BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
 BIN_DIFF="$ROOT_DIR/diff"
 BIN_PACK="$ROOT_DIR/pack"
-BIN_PATCH="$ROOT_DIR/patch"
 BIN_FUSE="$ROOT_DIR/fuse-diff"
 BIN_MERGE="$ROOT_DIR/merge"
 
@@ -38,7 +37,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark patch $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_PATCH dimg $LOWER $UPPER-patched diff_$DIFF_NAME.dimg benchmark
+		$BIN_CTR_CLI patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
 

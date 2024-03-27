@@ -1,6 +1,6 @@
-.PHONY: snapshotter ctr-cli diff-tools server fuse-diff merge patch
+.PHONY: snapshotter ctr-cli diff-tools server fuse-diff merge
 
-all: snapshotter ctr-cli diff-tools server fuse-diff merge patch
+all: snapshotter ctr-cli diff-tools server fuse-diff merge
 
 run:
 	make clean
@@ -25,8 +25,5 @@ fuse-diff:
 merge:
 	go build -o merge ./cmd/merge
 
-patch:
-	go build -o patch ./cmd/patch
-
 clean:
-	rm -f snapshotter ctr-cli diff server fuse-diff merge patch
+	rm -f snapshotter ctr-cli diff server fuse-diff merge
