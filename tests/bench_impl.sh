@@ -7,7 +7,6 @@ ROOT_DIR=$(cd $(dirname $0)/../; pwd)
 BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
 BIN_DIFF="$ROOT_DIR/diff"
 BIN_FUSE="$ROOT_DIR/fuse-diff"
-BIN_MERGE="$ROOT_DIR/merge"
 
 TEST_SCRIPT=$1
 IMAGE_DIR=$2
@@ -95,7 +94,7 @@ MERGED=$IMAGE_LOWER-$IMAGE_UPPER
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark merge $MERGE_LOWER and $MERGE_UPPER to $MERGED ($NOW_COUNT/$RUN_NUM)"
-	$BIN_MERGE dimg diff_$MERGE_LOWER.dimg diff_$MERGE_UPPER.dimg diff_merged_$MERGED.dimg benchmark
+	$BIN_CTR_CLI merge --lowerDimg=./diff_$MERGE_LOWER.dimg --upperDimg=./diff_$MERGE_UPPER.dimg --outDimg=./diff_merged_$MERGED.dimg --benchmark
 done
 
 echo "Testing merged $MERGED"

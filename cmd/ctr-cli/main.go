@@ -6,6 +6,7 @@ import (
 
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/convert"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/load"
+	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/merge"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/pack"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/patch"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/pull"
@@ -35,6 +36,7 @@ func NewApp() *cli.App {
 		load.Command(),
 		pull.Command(),
 		patch.Command(),
+		merge.Command(),
 	}
 
 	return app
