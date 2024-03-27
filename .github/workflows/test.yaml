@@ -15,15 +15,15 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: 1.21.x
       - run: sudo apt-get update
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3.7.0
+        uses: golangci/golangci-lint-action@v4
         with:
           version: v1.55.2
           args: --verbose
@@ -125,7 +125,7 @@ jobs:
         run: |
           mkdir /tmp/benchmark-results
           sudo lxc file pull test/home/ubuntu/d4c/tests/benchmark/${{ matrix.script }}-benchmark.log /tmp/benchmark-results/.
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: steps.get_result.conclusion == 'success'
         with:
           name: benchmark-${{ matrix.script }}
