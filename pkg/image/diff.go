@@ -70,6 +70,58 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	return nil
 }
 
+func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool) error {
+	oldCdimg, err := OpenCdimgFile(oldCdimgPath)
+	if err != nil {
+		return err
+	}
+	defer oldCdimg.Close()
+	oldDimg := oldCdimg.Dimg
+
+	newCdimg, err := OpenCdimgFile(newCdimgPath)
+	if err != nil {
+		return err
+	}
+	defer newCdimg.Close()
+	newDimg := newCdimg.Dimg
+
+	diffCdimg, err := os.Create(diffCdimgPath)
+	if err != nil {
+		return err
+	}
+	defer diffCdimg.Close()
+
+	diffOut := bytes.Buffer{}
+	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff)
+	if err != nil {
+		return err
+	}
+
+	h := sha256.New()
+	err = oldCdimg.WriteDimg(h)
+	if err != nil {
+		panic(err)
+	}
+	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
+
+	diffDimgOut := bytes.Buffer{}
+	header := DimgHeader{
+		BaseId:    baseId,
+		FileEntry: newDimg.header.FileEntry,
+	}
+	err = WriteDimg(&diffDimgOut, &header, &diffOut)
+	if err != nil {
+		return fmt.Errorf("failed to write dimg: %v", err)
+	}
+
+	err = PackIo(bytes.NewBuffer(newCdimg.Header.ConfigBytes), diffDimgOut.Bytes(), diffCdimg)
+	if err != nil {
+		return fmt.Errorf("failed to pack cdimg: %v", err)
+	}
+
+	return nil
+}
+
 // @return bool: is entirly new ?
 func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
 	entireNew := true

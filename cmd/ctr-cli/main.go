@@ -39,7 +39,6 @@ func NewApp() *cli.App {
 		load.Command(),
 		pull.Command(),
 		merge.Command(),
-		diff.Command(),
 	}
 
 	return app
@@ -52,6 +51,7 @@ func dimgCommand() *cli.Command {
 		Flags: []cli.Flag{},
 		Subcommands: []*cli.Command{
 			patch.DimgCommand(),
+			diff.DimgCommand(),
 		},
 	}
 	return &cmd
@@ -64,6 +64,7 @@ func cdimgCommand() *cli.Command {
 		Flags: []cli.Flag{},
 		Subcommands: []*cli.Command{
 			patch.CdimgCommand(),
+			diff.CdimgCommand(),
 		},
 	}
 	return &cmd
