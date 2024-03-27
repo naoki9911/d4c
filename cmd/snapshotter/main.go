@@ -7,9 +7,11 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/containerd/containerd"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
@@ -113,7 +115,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = client.initSnapshotter()
+	di3fsMgr := NewDi3FSManager()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-sig
+		di3fsMgr.UnmountAll()
+		log.G(context.TODO()).Info("succesfully unmounted all di3fs")
+		os.Exit(0)
+	}()
+
+	err = client.initSnapshotter(di3fsMgr)
 	if err != nil {
 		log.G(client.ctx).WithError(err).Error("failed to init snapsohtter")
 		os.Exit(1)
@@ -122,11 +134,10 @@ func main() {
 	client.startSnapshotter()
 }
 
-func (c *Client) initSnapshotter() error {
+func (c *Client) initSnapshotter(mgr *Di3FSManager) error {
 	log.G(c.ctx).Debug("initializing snapshotter")
 	c.snGrpcServer = grpc.NewServer()
 	var err error
-	fs := &DummyFS{}
 	err = removeImages(context.TODO(), c.ctr)
 	if err != nil {
 		log.G(context.TODO()).WithError(err).Error("failed to remove images")
@@ -141,7 +152,7 @@ func (c *Client) initSnapshotter() error {
 	if err = os.MkdirAll(c.snImageStorePath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory %q", c.snRootPath)
 	}
-	c.snSnapshotter, err = NewSnapshotter(c.ctx, c.snRootPath, fs)
+	c.snSnapshotter, err = NewSnapshotter(c.ctx, c.snRootPath, mgr)
 	if err != nil {
 		return err
 	}

@@ -14,10 +14,30 @@ import (
 
 var imageStore = "/tmp/di3fs/sn/images"
 
-type DummyFS struct {
+type Di3FSManager struct {
+	mounts map[string]struct{}
 }
 
-func (f *DummyFS) Mount(ctx context.Context, mountpoint string, labels map[string]string) error {
+func NewDi3FSManager() *Di3FSManager {
+	return &Di3FSManager{
+		mounts: map[string]struct{}{},
+	}
+}
+
+func (f *Di3FSManager) UnmountAll() {
+	for m := range f.mounts {
+		err := exec.Command("fusermount3", "-u", m).Run()
+		if err != nil {
+			log.G(context.TODO()).Errorf("failed to unmount %s", m)
+			continue
+		}
+		log.G(context.TODO()).Infof("unmounted %s", m)
+	}
+
+	f.mounts = map[string]struct{}{}
+}
+
+func (f *Di3FSManager) Mount(ctx context.Context, mountpoint string, labels map[string]string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"mountpoint": mountpoint,
 		"labels":     labels,
@@ -31,11 +51,12 @@ func (f *DummyFS) Mount(ctx context.Context, mountpoint string, labels map[strin
 	if err != nil {
 		return err
 	}
+	f.mounts[mountpoint] = struct{}{}
 	log.G(ctx).Infof("success to mount %q", d)
 	return nil
 }
 
-func (f *DummyFS) mountDImg(ctx context.Context, mountpoint, dimgDigest string) error {
+func (f *Di3FSManager) mountDImg(ctx context.Context, mountpoint, dimgDigest string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"mountpoint": mountpoint,
 		"dimgDigest": dimgDigest,
@@ -55,7 +76,7 @@ func (f *DummyFS) mountDImg(ctx context.Context, mountpoint, dimgDigest string) 
 	return nil
 }
 
-func (f *DummyFS) Check(ctx context.Context, mountpoint string, labels map[string]string) error {
+func (f *Di3FSManager) Check(ctx context.Context, mountpoint string, labels map[string]string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"mountpoint": mountpoint,
 		"labels":     labels,
@@ -63,11 +84,12 @@ func (f *DummyFS) Check(ctx context.Context, mountpoint string, labels map[strin
 	return nil
 }
 
-func (f *DummyFS) Unmount(ctx context.Context, mountpoint string) error {
+func (f *Di3FSManager) Unmount(ctx context.Context, mountpoint string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"mountpoint": mountpoint,
 	}).Info("DummyFS Unmount called")
 
+	delete(f.mounts, mountpoint)
 	err := exec.Command("fusermount3", "-u", mountpoint).Run()
 	if err != nil {
 		log.G(ctx).Errorf("failed to unmount %s", mountpoint)
