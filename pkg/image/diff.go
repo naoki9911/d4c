@@ -59,7 +59,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 
 	header := DimgHeader{
 		BaseId:    baseId,
-		FileEntry: newDimg.imageHeader.FileEntry,
+		FileEntry: newDimg.header.FileEntry,
 	}
 
 	err = WriteDimg(diffFile, &header, &diffOut)

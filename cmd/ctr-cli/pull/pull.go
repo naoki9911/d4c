@@ -179,23 +179,23 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 	}
 	logger.Infof("recieved response imageName=%s Version=%s baseVersion=%s", resJson.Name, resJson.Version, resJson.BaseVersion)
 
-	image, err := image.LoadHeader(resp.Body)
+	header, _, err := image.LoadCdimgHeader(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load cdimg header: %v", err)
 	}
-	logger.WithField("dimgSize", image.Header.DimgSize).Debug("got image header")
+	logger.WithField("dimgSize", header.Head.DimgSize).Debug("got image header")
 
-	dimgPath := filepath.Join(snClient.SnImageStorePath, image.DImgDigest.String()+".dimg")
+	dimgPath := filepath.Join(snClient.SnImageStorePath, header.DimgDigest.String()+".dimg")
 	dimgFile, err := os.Create(dimgPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create dimg at %s: %v", dimgPath, err)
 	}
 	dimgSize, err := io.Copy(dimgFile, resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to copy dimg: %v", err)
 	}
-	if dimgSize != image.Header.DimgSize {
-		return fmt.Errorf("invalid dimg (expected=%d actual=%d)", image.Header.DimgSize, dimgSize)
+	if dimgSize != header.Head.DimgSize {
+		return fmt.Errorf("invalid dimg (expected=%d actual=%d)", header.Head.DimgSize, dimgSize)
 	}
 	logger.WithField("dimgPath", dimgPath).Info("dimg saved")
 
@@ -215,9 +215,9 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 		}
 	}
 
-	err = load.LoadImage(snClient, context.TODO(), reqImgName, reqImgVersion, image)
+	err = load.LoadImage(snClient, context.TODO(), reqImgName, reqImgVersion, header)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load image: %v", err)
 	}
 	if b != nil {
 		metricDownload := benchmark.Metric{

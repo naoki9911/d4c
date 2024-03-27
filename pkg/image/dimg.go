@@ -17,9 +17,9 @@ type DimgHeader struct {
 }
 
 type DimgFile struct {
-	imageHeader *DimgHeader
-	file        *os.File
-	bodyOffset  int64
+	header     *DimgHeader
+	file       *os.File
+	bodyOffset int64
 }
 
 func OpenDimgFile(path string) (*DimgFile, error) {
@@ -28,36 +28,46 @@ func OpenDimgFile(path string) (*DimgFile, error) {
 		return nil, err
 	}
 
-	curOffset := int64(0)
-	bs := make([]byte, 4)
-	_, err = imageFile.ReadAt(bs, curOffset)
-	if err != nil {
-		return nil, err
-	}
-	curOffset += 4
-
-	compressedHeaderSize := binary.LittleEndian.Uint32(bs)
-	compressedHeader := make([]byte, compressedHeaderSize)
-	_, err = imageFile.ReadAt(compressedHeader, curOffset)
-	if err != nil {
-		return nil, err
-	}
-	curOffset += int64(compressedHeaderSize)
-	imageHeader, err := UnmarshalJsonFromCompressed[DimgHeader](compressedHeader)
+	header, offset, err := LoadDimgHeader(imageFile)
 	if err != nil {
 		return nil, err
 	}
 
 	df := &DimgFile{
-		imageHeader: imageHeader,
-		file:        imageFile,
-		bodyOffset:  curOffset,
+		header:     header,
+		file:       imageFile,
+		bodyOffset: offset,
 	}
 	return df, nil
 }
 
+// reader must be seek at the head of dimg header
+func LoadDimgHeader(reader io.Reader) (*DimgHeader, int64, error) {
+	curOffset := int64(0)
+	bs := make([]byte, 4)
+	_, err := reader.Read(bs)
+	if err != nil {
+		return nil, 0, err
+	}
+	curOffset += 4
+
+	compressedHeaderSize := binary.LittleEndian.Uint32(bs)
+	compressedHeader := make([]byte, compressedHeaderSize)
+	_, err = reader.Read(compressedHeader)
+	if err != nil {
+		return nil, 0, err
+	}
+	curOffset += int64(compressedHeaderSize)
+	header, err := UnmarshalJsonFromCompressed[DimgHeader](compressedHeader)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return header, curOffset, nil
+}
+
 func (df *DimgFile) Header() *DimgHeader {
-	return df.imageHeader
+	return df.header
 }
 
 func (df *DimgFile) Close() error {

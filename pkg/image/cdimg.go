@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 
@@ -17,25 +18,54 @@ import (
 
 var logger = log.G(context.TODO())
 
-type Di3FSImageHeader struct {
+// Container delta image (Cdimg) format
+// [ length of compressed CdimgHeadHeader (4bit)]
+// [ compressed CdimgHeadHeader ]
+// [ compressed CdimgHeader ]
+// [ content body(dimg) ]
+
+type CdimgHeadHeader struct {
 	ManifestSize   int64         `json:"manifestSize"`
 	ManifestDigest digest.Digest `json:"manifestDigest"`
 	ConfigSize     int64         `json:"configSize"`
 	DimgSize       int64         `json:"dimgSize"`
 }
 
-type Di3FSImage struct {
-	Header        Di3FSImageHeader
-	ManifestBytes []byte
+type CdimgHeader struct {
+	Head          CdimgHeadHeader
 	Manifest      v1.Manifest
-	ConfigBytes   []byte
+	ManifestBytes []byte
 	Config        v1.Image
-	DImgDigest    digest.Digest
-	DImgOffset    int64
-	Image         *os.File
+	ConfigBytes   []byte
+	DimgDigest    digest.Digest
 }
 
-func (h *Di3FSImageHeader) pack() ([]byte, error) {
+type CdimgFile struct {
+	Header     *CdimgHeader
+	Dimg       *DimgFile
+	DimgOffset int64
+}
+
+func (cf *CdimgFile) Close() {
+	if cf.Dimg != nil {
+		cf.Dimg.Close()
+	}
+}
+
+func (cf *CdimgFile) WriteDimg(writer io.Writer) error {
+	_, err := cf.Dimg.file.Seek(cf.DimgOffset, 0)
+	if err != nil {
+		return fmt.Errorf("failed to seek dimg: %v", err)
+	}
+	_, err = io.Copy(writer, cf.Dimg.file)
+	if err != nil {
+		return fmt.Errorf("faield to copy dimg: %v", err)
+	}
+
+	return nil
+}
+
+func (h *CdimgHeadHeader) pack() ([]byte, error) {
 	jsonBytes, err := json.Marshal(h)
 	if err != nil {
 		return nil, err
@@ -122,7 +152,7 @@ func PackCdimg(configPath, dimgPath, outPath string) error {
 }
 
 func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
-	header := Di3FSImageHeader{}
+	head := CdimgHeadHeader{}
 	outBytes := bytes.Buffer{}
 	config, err := loadConfigFromReader(configReader)
 	if err != nil {
@@ -168,34 +198,34 @@ func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	header.ManifestDigest = *manifestDigest
+	head.ManifestDigest = *manifestDigest
 
-	header.ManifestSize, err = packBytes(manifestBytes, &outBytes)
+	head.ManifestSize, err = packBytes(manifestBytes, &outBytes)
 	if err != nil {
 		return err
 	}
-	logger.Debugf("compressed manifest (size=%d)", header.ManifestSize)
+	logger.Debugf("compressed manifest (size=%d)", head.ManifestSize)
 
-	header.ConfigSize, err = packBytes(configBytes, &outBytes)
+	head.ConfigSize, err = packBytes(configBytes, &outBytes)
 	if err != nil {
 		return err
 	}
-	logger.Debugf("compressed config (size=%d)", header.ConfigSize)
+	logger.Debugf("compressed config (size=%d)", head.ConfigSize)
 
-	header.DimgSize = dimgFileSize
+	head.DimgSize = dimgFileSize
 
-	headerCompressedBytes, err := header.pack()
+	headCompressedBytes, err := head.pack()
 	if err != nil {
 		return err
 	}
 	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, uint32(len(headerCompressedBytes)))
+	binary.LittleEndian.PutUint32(bs, uint32(len(headCompressedBytes)))
 
-	_, err = out.Write(append(bs, headerCompressedBytes...))
+	_, err = out.Write(append(bs, headCompressedBytes...))
 	if err != nil {
 		return err
 	}
-	logger.WithField("header", header).Debugf("written Di3FSImageHeader")
+	logger.WithField("head", head).Debugf("written CdimgHeadHeader")
 
 	_, err = io.Copy(out, &outBytes)
 	if err != nil {
@@ -210,12 +240,12 @@ func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
 	return nil
 }
 
-func LoadHeader(r io.Reader) (*Di3FSImage, error) {
-	var image Di3FSImage
+func LoadCdimgHeader(r io.Reader) (*CdimgHeader, int64, error) {
+	var header CdimgHeader
 	bs := make([]byte, 4)
 	_, err := r.Read(bs)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	headerSize := binary.LittleEndian.Uint32(bs)
 	curOffset := int64(len(bs))
@@ -223,69 +253,80 @@ func LoadHeader(r io.Reader) (*Di3FSImage, error) {
 	headerBytes := make([]byte, headerSize)
 	_, err = r.Read(headerBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	header, err := utils.UnmarshalJsonFromCompressed[Di3FSImageHeader](headerBytes)
+	head, err := utils.UnmarshalJsonFromCompressed[CdimgHeadHeader](headerBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	image.Header = *header
+	header.Head = *head
 	curOffset += int64(len(headerBytes))
 
 	// load manifest
-	manifestZstdBytes := make([]byte, header.ManifestSize)
+	manifestZstdBytes := make([]byte, header.Head.ManifestSize)
 	_, err = r.Read(manifestZstdBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	manifestBytes, err := utils.DecompressWithZstd(manifestZstdBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	curOffset += int64(len(manifestZstdBytes))
 	var manifest v1.Manifest
 	err = json.Unmarshal(manifestBytes, &manifest)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	image.ManifestBytes = manifestBytes
-	image.Manifest = manifest
+	header.Manifest = manifest
+	header.ManifestBytes = manifestBytes
 
 	// load config
-	configZstdBytes := make([]byte, header.ConfigSize)
+	configZstdBytes := make([]byte, header.Head.ConfigSize)
 	_, err = r.Read(configZstdBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	configBytes, err := utils.DecompressWithZstd(configZstdBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	curOffset += int64(len(configZstdBytes))
 	var config v1.Image
 	err = json.Unmarshal(configBytes, &config)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	image.ConfigBytes = configBytes
-	image.Config = config
+	header.Config = config
+	header.ConfigBytes = configBytes
 
-	image.DImgDigest = config.RootFS.DiffIDs[0]
-	image.DImgOffset = curOffset
-	return &image, nil
+	header.DimgDigest = config.RootFS.DiffIDs[0]
+	return &header, curOffset, nil
 }
 
-func Load(dimgPath string) (*Di3FSImage, error) {
-	imgFile, err := os.Open(dimgPath)
+func OpenCdimgFile(path string) (*CdimgFile, error) {
+	imgFile, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
-	image, err := LoadHeader(imgFile)
+	header, dimgOffset, err := LoadCdimgHeader(imgFile)
 	if err != nil {
 		return nil, err
 	}
-	image.Image = imgFile
 
-	return image, nil
+	dimgHeader, dimgBodyOffsetInc, err := LoadDimgHeader(imgFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CdimgFile{
+		Header:     header,
+		DimgOffset: dimgOffset,
+		Dimg: &DimgFile{
+			header:     dimgHeader,
+			file:       imgFile,
+			bodyOffset: dimgOffset + dimgBodyOffsetInc,
+		},
+	}, nil
 }

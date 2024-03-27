@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,21 +33,21 @@ var Flags = []cli.Flag{
 	},
 }
 
-func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, image *image.Di3FSImage) error {
+func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, imageHeader *image.CdimgHeader) error {
 	cs := snClient.CtrClient.ContentStore()
-	err := cs.Delete(ctx, image.Header.ManifestDigest)
+	err := cs.Delete(ctx, imageHeader.Head.ManifestDigest)
 	if err != nil {
-		log.G(ctx).Infof("%s is already removed: %v", image.Header.ManifestDigest, err)
+		log.G(ctx).Infof("%s is already removed: %v", imageHeader.Head.ManifestDigest, err)
 	}
-	err = content.WriteBlob(ctx, cs, image.Header.ManifestDigest.Hex(), bytes.NewReader(image.ManifestBytes),
+	err = content.WriteBlob(ctx, cs, imageHeader.Head.ManifestDigest.Hex(), bytes.NewReader(imageHeader.ManifestBytes),
 		v1.Descriptor{
-			Size:   int64(len(image.ManifestBytes)),
-			Digest: image.Header.ManifestDigest,
+			Size:   int64(len(imageHeader.ManifestBytes)),
+			Digest: imageHeader.Head.ManifestDigest,
 		},
 		content.WithLabels(map[string]string{
 			sns.NerverGC:         "hoghoge",
 			sns.ImageLabelPuller: "di3fs",
-			fmt.Sprintf("%s.config", sns.ContentLabelContainerdGC): image.Manifest.Config.Digest.String(),
+			fmt.Sprintf("%s.config", sns.ContentLabelContainerdGC): imageHeader.Manifest.Config.Digest.String(),
 			//fmt.Sprintf("%s.di3fs", ContentLabelContainerdGC):  dId.String(),
 		}),
 	)
@@ -58,10 +57,10 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	log.G(ctx).Debug("load manifest done")
 
 	err = content.WriteBlob(
-		ctx, cs, image.Manifest.Config.Digest.Hex(), bytes.NewReader(image.ConfigBytes),
+		ctx, cs, imageHeader.Manifest.Config.Digest.Hex(), bytes.NewReader(imageHeader.ConfigBytes),
 		v1.Descriptor{
-			Size:   int64(len(image.ConfigBytes)),
-			Digest: image.Manifest.Config.Digest,
+			Size:   int64(len(imageHeader.ConfigBytes)),
+			Digest: imageHeader.Manifest.Config.Digest,
 		},
 		content.WithLabels(map[string]string{
 			sns.NerverGC: "hoghoge",
@@ -78,8 +77,8 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 		Name: imageName + ":" + imageVersion,
 		Target: v1.Descriptor{
 			MediaType: sns.ImageMediaTypeManifestV2,
-			Digest:    image.Header.ManifestDigest,
-			Size:      int64(len(image.ManifestBytes)),
+			Digest:    imageHeader.Head.ManifestDigest,
+			Size:      int64(len(imageHeader.ManifestBytes)),
 		},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -94,15 +93,15 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 
 	// now ready to create snapshot
-	err = sns.CreateSnapshot(ctx, snClient.SnClient, &image.Header.ManifestDigest, &image.DImgDigest, imageName+":"+imageVersion)
+	err = sns.CreateSnapshot(ctx, snClient.SnClient, &imageHeader.Head.ManifestDigest, &imageHeader.DimgDigest, imageName+":"+imageVersion)
 	if err != nil {
 		return err
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
-		"header":   image.Header,
-		"manifest": image.Manifest,
-		"config":   image.Config,
+		"header":   imageHeader,
+		"manifest": imageHeader.Manifest,
+		"config":   imageHeader.Config,
 	}).Debugf("image loaded")
 
 	return nil
@@ -122,29 +121,26 @@ func Load(ctx context.Context, imgNameWithVersion, imgPath string) error {
 	imgVersion := imgNames[1]
 	log.G(ctx).WithFields(logrus.Fields{"imageName": imgName, "imageVersion": imgVersion}).Infof("loading image from %q", imgPath)
 	// load image
-	image, err := image.Load(imgPath)
+	image, err := image.OpenCdimgFile(imgPath)
 	if err != nil {
 		return err
 	}
+	defer image.Close()
 	log.G(ctx).Info("loaded image")
 
 	// extract dimg
-	imagePath := filepath.Join(snClient.SnImageStorePath, image.DImgDigest.String()+".dimg")
-	_, err = image.Image.Seek(image.DImgOffset, 0)
-	if err != nil {
-		return err
-	}
+	imagePath := filepath.Join(snClient.SnImageStorePath, image.Header.DimgDigest.String()+".dimg")
 	dimgFile, err := os.Create(imagePath)
 	if err != nil {
 		return err
 	}
 	defer dimgFile.Close()
-	_, err = io.Copy(dimgFile, image.Image)
+	err = image.WriteDimg(dimgFile)
 	if err != nil {
 		return err
 	}
 
-	err = LoadImage(snClient, ctx, imgName, imgVersion, image)
+	err = LoadImage(snClient, ctx, imgName, imgVersion, image.Header)
 	if err != nil {
 		return err
 	}
