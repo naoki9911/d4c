@@ -11,22 +11,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  #golangci-lint:
-  #  runs-on: ubuntu-22.04
-  #  timeout-minutes: 20
-  #  steps:
-  #    - uses: actions/checkout@v4.1.1
-  #      with:
-  #        fetch-depth: 1
-  #    - uses: actions/setup-go@v3
-  #      with:
-  #        go-version: 1.21.x
-  #    - run: sudo apt-get update
-  #    - name: golangci-lint
-  #      uses: golangci/golangci-lint-action@v3.7.0
-  #      with:
-  #        version: v1.55.2
-  #        args: --verbose
+  golangci-lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.21.x
+      - run: sudo apt-get update
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3.7.0
+        with:
+          version: v1.55.2
+          args: --verbose
 
   create-lxc-image:
     name: create-lxc-image
