@@ -81,7 +81,7 @@ func dimgAction(c *cli.Context) error {
 	dimgHeader := dimgFile.Header()
 
 	start := time.Now()
-	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.BaseId == "")
+	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "")
 	if err != nil {
 		panic(err)
 	}
@@ -172,7 +172,7 @@ func cdimgAction(c *cli.Context) error {
 	dimgHeader := dimgFile.Header()
 
 	start := time.Now()
-	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.BaseId == "")
+	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "")
 	if err != nil {
 		panic(err)
 	}

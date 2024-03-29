@@ -45,7 +45,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_FUSE --baseDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
+		$BIN_FUSE --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
 		sleep 5
 		if [ $j -eq 0 ]; then
 			diff -r $UPPER /tmp/fuse --no-dereference

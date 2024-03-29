@@ -771,7 +771,7 @@ func MergeDiffDimg(lowerEntry, upperEntry *FileEntry, lowerDiff, upperDiff strin
 	return nil
 }
 
-func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) error {
+func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) (*DimgHeader, error) {
 	lowerImgFile, err := OpenDimgFile(lowerDimg)
 	if err != nil {
 		panic(err)
@@ -792,13 +792,61 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer) error {
 	}
 
 	header := DimgHeader{
-		BaseId:    lowerImgFile.Header().BaseId,
+		Id:        upperImgFile.Header().Id,
+		ParentId:  lowerImgFile.Header().ParentId,
 		FileEntry: *mergedEntry,
 	}
 
 	err = WriteDimg(merged, &header, &tmp)
 	if err != nil {
+		return nil, fmt.Errorf("failed to write to dimg: %v", err)
+	}
+	return &header, nil
+}
+
+func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer) error {
+	lowerCdimgFile, err := OpenCdimgFile(lowerCdimg)
+	if err != nil {
+		panic(err)
+	}
+	defer lowerCdimgFile.Close()
+	lowerDimg := lowerCdimgFile.Dimg
+
+	upperCdimgFile, err := OpenCdimgFile(upperCdimg)
+	if err != nil {
+		panic(err)
+	}
+	defer upperCdimgFile.Close()
+	upperDimg := upperCdimgFile.Dimg
+
+	tmp := bytes.Buffer{}
+	mergedEntry := upperDimg.Header().FileEntry.DeepCopy()
+	lowerFE := &lowerDimg.Header().FileEntry
+	upperFE := &upperDimg.Header().FileEntry
+	err = MergeDiffDimg(lowerFE, upperFE, lowerFE.Name, upperFE.Name, lowerDimg, upperDimg, mergedEntry, &tmp)
+	if err != nil {
+		panic(err)
+	}
+
+	header := DimgHeader{
+		Id:        upperDimg.Header().Id,
+		ParentId:  lowerDimg.Header().ParentId,
+		FileEntry: *mergedEntry,
+	}
+
+	mergedDimg := bytes.Buffer{}
+	err = WriteDimg(&mergedDimg, &header, &tmp)
+	if err != nil {
 		return fmt.Errorf("failed to write to dimg: %v", err)
+	}
+
+	err = WriteCdimgHeader(bytes.NewBuffer(upperCdimgFile.Header.ConfigBytes), &header, int64(mergedDimg.Len()), merged)
+	if err != nil {
+		return fmt.Errorf("failed to cdimg header: %v", err)
+	}
+	_, err = io.Copy(merged, &mergedDimg)
+	if err != nil {
+		return fmt.Errorf("failed to write dimg: %v", err)
 	}
 	return nil
 }

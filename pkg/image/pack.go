@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path"
+
+	"github.com/opencontainers/go-digest"
 )
 
 func compressFileWithZstd(path string) ([]byte, error) {
@@ -172,8 +174,11 @@ func PackDir(dirPath, outDimgPath string) error {
 		return err
 	}
 
+	bodyDigest := digest.FromBytes(outBody.Bytes())
+
 	header := DimgHeader{
-		BaseId:    "",
+		Id:        bodyDigest,
+		ParentId:  digest.Digest(""),
 		FileEntry: *entry,
 	}
 

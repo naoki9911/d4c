@@ -138,12 +138,27 @@ func PackCdimg(configPath, dimgPath, outPath string) error {
 	defer dimgFile.Close()
 	logger.Debugf("opened dimgFile %q", dimgPath)
 
-	dimgBytes, err := io.ReadAll(dimgFile)
+	dimgStat, err := dimgFile.Stat()
 	if err != nil {
 		return err
 	}
 
-	err = PackIo(configFile, dimgBytes, outFile)
+	dimgHeader, _, err := LoadDimgHeader(dimgFile)
+	if err != nil {
+		return err
+	}
+
+	err = WriteCdimgHeader(configFile, dimgHeader, dimgStat.Size(), outFile)
+	if err != nil {
+		return err
+	}
+
+	_, err = dimgFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(outFile, dimgFile)
 	if err != nil {
 		return err
 	}
@@ -151,19 +166,16 @@ func PackCdimg(configPath, dimgPath, outPath string) error {
 	return nil
 }
 
-func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
+func WriteCdimgHeader(configReader io.Reader, dimgHeader *DimgHeader, dimgSize int64, out io.Writer) error {
 	head := CdimgHeadHeader{}
 	outBytes := bytes.Buffer{}
 	config, err := loadConfigFromReader(configReader)
 	if err != nil {
 		return err
 	}
-	dimgFileSize, dimgFilDigest, err := utils.GetSizeAndDigest(dimg)
-	if err != nil {
-		return err
-	}
 
-	config.RootFS.DiffIDs = []digest.Digest{*dimgFilDigest}
+	dimgId := dimgHeader.Digest()
+	config.RootFS.DiffIDs = []digest.Digest{dimgId}
 	configBytes, err := json.Marshal(config)
 	if err != nil {
 		return err
@@ -184,8 +196,8 @@ func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
 		Layers: []v1.Descriptor{
 			{
 				MediaType: v1.MediaTypeImageLayer,
-				Size:      dimgFileSize,
-				Digest:    *dimgFilDigest,
+				Size:      dimgSize,
+				Digest:    dimgId,
 			},
 		},
 	}
@@ -212,7 +224,7 @@ func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
 	}
 	logger.Debugf("compressed config (size=%d)", head.ConfigSize)
 
-	head.DimgSize = dimgFileSize
+	head.DimgSize = dimgSize
 
 	headCompressedBytes, err := head.pack()
 	if err != nil {
@@ -231,11 +243,6 @@ func PackIo(configReader io.Reader, dimg []byte, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = out.Write(dimg)
-	if err != nil {
-		return err
-	}
-	logger.Debugf("written contents")
 
 	return nil
 }

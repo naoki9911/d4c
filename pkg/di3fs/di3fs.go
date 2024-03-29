@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -285,6 +284,9 @@ func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *D
 func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile) (Di3fsRoot, error) {
 	baseFEs := make([]*image.FileEntry, 0)
 	for i := range baseImages {
+		if baseImages[i] == nil {
+			continue
+		}
 		baseFEs = append(baseFEs, &baseImages[i].Header().FileEntry)
 	}
 	rootNode := newNode(&diffImage.Header().FileEntry, baseFEs, nil)
@@ -298,7 +300,7 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 	return root, nil
 }
 
-func Do(diffImagePath, mountPath string) error {
+func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 	start := time.Now()
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
@@ -306,30 +308,27 @@ func Do(diffImagePath, mountPath string) error {
 	log.SetFormatter(customFormatter)
 	log.SetLevel(log.InfoLevel)
 
-	// Scans the arg list and sets up flags
-	diffImagePathAbs, err := filepath.Abs(diffImagePath)
+	parentImageFiles := make([]*image.DimgFile, 0)
+
+	diffImageFile, err := image.OpenDimgFile(dimgPaths[0])
 	if err != nil {
 		panic(err)
 	}
+	defer diffImageFile.Close()
+	log.Infof("diffImage %s is loaded", diffImageFile.Header().Id)
 
-	baseImageFiles := make([]*image.DimgFile, 0)
-
-	diffImageFile, err := image.OpenDimgFile(diffImagePathAbs)
-	if err != nil {
-		panic(err)
-	}
-
-	baseImageId := diffImageFile.Header().BaseId
-	for baseImageId != "" {
-		imageStore, _ := filepath.Split(diffImagePathAbs)
-		baseImagePath := filepath.Join(imageStore, baseImageId+".dimg")
-		baseImageFile, err := image.OpenDimgFile(baseImagePath)
+	dimgIdx := 1
+	parentImageId := diffImageFile.Header().ParentId
+	for parentImageId != "" {
+		parentImageFile, err := image.OpenDimgFile(dimgPaths[dimgIdx])
 		if err != nil {
 			panic(err)
 		}
-		baseImageFiles = append(baseImageFiles, baseImageFile)
-		baseImageId = baseImageFile.Header().BaseId
-		log.Infof("baseImage %s is loaded", baseImageId)
+		defer parentImageFile.Close()
+		parentImageFiles = append(parentImageFiles, parentImageFile)
+		log.Infof("parentImage %s is loaded", parentImageFile.Header().Id)
+		parentImageId = parentImageFile.Header().ParentId
+		dimgIdx += 1
 	}
 
 	sec := time.Second
@@ -343,7 +342,7 @@ func Do(diffImagePath, mountPath string) error {
 	opts.MountOptions.Name = "fuse-diff"
 	opts.NullPermissions = true
 
-	di3fsRoot, err := NewDi3fsRoot(opts, baseImageFiles, diffImageFile)
+	di3fsRoot, err := NewDi3fsRoot(opts, parentImageFiles, diffImageFile)
 	if err != nil {
 		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
 	}
@@ -354,6 +353,7 @@ func Do(diffImagePath, mountPath string) error {
 	}
 	log.Infof("Mounted!")
 	fmt.Printf("elapsed = %v\n", (time.Since(start).Milliseconds()))
+	mountDone <- true
 	server.Wait()
 
 	return nil

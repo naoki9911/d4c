@@ -184,6 +184,7 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 	logger.WithField("Diffs", pathStr).Info("Diff Data to be transfered found")
 
 	diffDataBytes := bytes.Buffer{}
+	diffHeader := &image.DimgHeader{}
 	configPath := ""
 
 	if len(path) == 2 {
@@ -195,6 +196,19 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		diffHeader, _, err = image.LoadDimgHeader(diffF)
+		if err != nil {
+			logger.Errorf("failed to lead DimgHeader: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, err = diffF.Seek(0, 0)
+		if err != nil {
+			logger.Errorf("failed to seek dimg File: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		_, err = io.Copy(&diffDataBytes, diffF)
 		if err != nil {
 			logger.Errorf("failed to load=%v", err)
@@ -213,7 +227,7 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 			upperDiff := DiffDatas[upperTag]
 			logger.WithFields(logrus.Fields{"lower": lowerFileName, "upper": upperDiff.FileName}).Info("merge")
 			diffDataBytes = bytes.Buffer{}
-			err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes)
+			diffHeader, err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes)
 			if err != nil {
 				logger.Errorf("failed to merge=%v", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -275,9 +289,16 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer configFile.Close()
-	err = image.PackIo(configFile, diffDataBytes.Bytes(), w)
+
+	err = image.WriteCdimgHeader(configFile, diffHeader, int64(diffDataBytes.Len()), w)
 	if err != nil {
-		logger.Errorf("failed to pack config file err=%v", err)
+		logger.Errorf("failed to cdimg header: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	_, err = io.Copy(w, &diffDataBytes)
+	if err != nil {
+		logger.Errorf("failed to write dimg: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -2,7 +2,6 @@ package image
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -45,20 +44,9 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 		return err
 	}
 
-	h := sha256.New()
-	baseImg, err := os.Open(oldDimgPath)
-	if err != nil {
-		panic(err)
-	}
-	defer baseImg.Close()
-	_, err = io.Copy(h, baseImg)
-	if err != nil {
-		panic(err)
-	}
-	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
-
 	header := DimgHeader{
-		BaseId:    baseId,
+		Id:        newDimg.Header().Id,
+		ParentId:  oldDimg.Header().Id,
 		FileEntry: newDimg.header.FileEntry,
 	}
 
@@ -97,16 +85,10 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 		return err
 	}
 
-	h := sha256.New()
-	err = oldCdimg.WriteDimg(h)
-	if err != nil {
-		panic(err)
-	}
-	baseId := fmt.Sprintf("sha256:%x", h.Sum(nil))
-
 	diffDimgOut := bytes.Buffer{}
 	header := DimgHeader{
-		BaseId:    baseId,
+		Id:        newDimg.Header().Id,
+		ParentId:  oldDimg.Header().Id,
 		FileEntry: newDimg.header.FileEntry,
 	}
 	err = WriteDimg(&diffDimgOut, &header, &diffOut)
@@ -114,9 +96,13 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 		return fmt.Errorf("failed to write dimg: %v", err)
 	}
 
-	err = PackIo(bytes.NewBuffer(newCdimg.Header.ConfigBytes), diffDimgOut.Bytes(), diffCdimg)
+	err = WriteCdimgHeader(bytes.NewBuffer(newCdimg.Header.ConfigBytes), &header, int64(diffDimgOut.Len()), diffCdimg)
 	if err != nil {
-		return fmt.Errorf("failed to pack cdimg: %v", err)
+		return fmt.Errorf("failed to cdimg header: %v", err)
+	}
+	_, err = io.Copy(diffCdimg, &diffDimgOut)
+	if err != nil {
+		return fmt.Errorf("failed to write dimg: %v", err)
 	}
 
 	return nil

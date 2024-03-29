@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	sns "github.com/naoki9911/fuse-diff-containerd/pkg/snapshotter"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/sirupsen/logrus"
@@ -27,13 +28,13 @@ var Flags = []cli.Flag{
 		Required: true,
 	},
 	&cli.StringFlag{
-		Name:     "dimg",
-		Usage:    "path to dimg to be loaded",
+		Name:     "cdimg",
+		Usage:    "path to cdimg to be loaded",
 		Required: true,
 	},
 }
 
-func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, imageHeader *image.CdimgHeader) error {
+func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, imageHeader *image.CdimgHeader, dimgPath string) error {
 	cs := snClient.CtrClient.ContentStore()
 	err := cs.Delete(ctx, imageHeader.Head.ManifestDigest)
 	if err != nil {
@@ -93,7 +94,7 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 
 	// now ready to create snapshot
-	err = sns.CreateSnapshot(ctx, snClient.SnClient, &imageHeader.Head.ManifestDigest, &imageHeader.DimgDigest, imageName+":"+imageVersion)
+	err = sns.CreateSnapshot(ctx, snClient.SnClient, &imageHeader.Head.ManifestDigest, &imageHeader.DimgDigest, imageName+":"+imageVersion, dimgPath)
 	if err != nil {
 		return err
 	}
@@ -129,8 +130,8 @@ func Load(ctx context.Context, imgNameWithVersion, imgPath string) error {
 	log.G(ctx).Info("loaded image")
 
 	// extract dimg
-	imagePath := filepath.Join(snClient.SnImageStorePath, image.Header.DimgDigest.String()+".dimg")
-	dimgFile, err := os.Create(imagePath)
+	dimgPath := filepath.Join(os.TempDir(), utils.GetRandomId("d4c-snapshotter")+".dimg")
+	dimgFile, err := os.Create(dimgPath)
 	if err != nil {
 		return err
 	}
@@ -139,8 +140,10 @@ func Load(ctx context.Context, imgNameWithVersion, imgPath string) error {
 	if err != nil {
 		return err
 	}
+	// LaodImage use written dimg. so close here.
+	dimgFile.Close()
 
-	err = LoadImage(snClient, ctx, imgName, imgVersion, image.Header)
+	err = LoadImage(snClient, ctx, imgName, imgVersion, image.Header, dimgPath)
 	if err != nil {
 		return err
 	}
@@ -150,7 +153,7 @@ func Load(ctx context.Context, imgNameWithVersion, imgPath string) error {
 
 func Action(c *cli.Context) error {
 	imgName := c.String("image")
-	imgPath := c.String("dimg")
+	imgPath := c.String("cdimg")
 	err := Load(context.TODO(), imgName, imgPath)
 	if err != nil {
 		return err

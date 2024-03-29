@@ -2,26 +2,39 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
-	"path"
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	sns "github.com/naoki9911/fuse-diff-containerd/pkg/snapshotter"
+	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 )
 
-var imageStore = "/tmp/di3fs/sn/images"
-
 type Di3FSManager struct {
-	mounts map[string]struct{}
+	dimgStore *image.DimgStore
+	mounts    map[string]struct{}
 }
 
-func NewDi3FSManager() *Di3FSManager {
-	return &Di3FSManager{
-		mounts: map[string]struct{}{},
+func NewDi3FSManager(storePath string) (*Di3FSManager, error) {
+	store, err := image.NewDimgStore(storePath)
+	if err != nil {
+		return nil, err
 	}
+
+	dm := &Di3FSManager{
+		dimgStore: store,
+		mounts:    map[string]struct{}{},
+	}
+
+	return dm, nil
+}
+
+func (f *Di3FSManager) UpdateStore() error {
+	return f.dimgStore.Walk()
 }
 
 func (f *Di3FSManager) UnmountAll() {
@@ -42,12 +55,26 @@ func (f *Di3FSManager) Mount(ctx context.Context, mountpoint string, labels map[
 		"mountpoint": mountpoint,
 		"labels":     labels,
 	}).Info("DummyFS Mount called")
+	tempDimgPath, ok := labels[sns.SnapshotLabelTempDimg]
+	if !ok {
+		return errdefs.ErrNotFound
+	}
+	err := f.dimgStore.AddDimg(tempDimgPath)
+	if err != nil {
+		return fmt.Errorf("failed to add dimg %s to DimgStore: %v", tempDimgPath, err)
+	}
+
 	d, ok := labels[sns.SnapshotLabelRefUncompressed]
 	if !ok {
 		return errdefs.ErrNotFound
 	}
 
-	err := f.mountDImg(ctx, mountpoint, d)
+	dimgPaths, err := f.dimgStore.GetDimgPaths(digest.Digest(d))
+	if err != nil {
+		return fmt.Errorf("failed to get dimg paths for %s: %v", d, err)
+	}
+
+	err = f.mountDImg(ctx, mountpoint, dimgPaths)
 	if err != nil {
 		return err
 	}
@@ -56,23 +83,22 @@ func (f *Di3FSManager) Mount(ctx context.Context, mountpoint string, labels map[
 	return nil
 }
 
-func (f *Di3FSManager) mountDImg(ctx context.Context, mountpoint, dimgDigest string) error {
+func (f *Di3FSManager) mountDImg(ctx context.Context, mountpoint string, dimgPaths []string) error {
 	log.G(ctx).WithFields(logrus.Fields{
 		"mountpoint": mountpoint,
-		"dimgDigest": dimgDigest,
+		"dimgPaths":  dimgPaths,
 	}).Info("start to mount DImg")
-	patchDirPath := path.Join(imageStore, dimgDigest+".dimg")
-	log.G(ctx).WithFields(logrus.Fields{
-		"patchDirPath": patchDirPath,
-	}).Info("mounting di3fs")
+	mountDoneChan := make(chan bool)
 	go func() {
-		err := di3fs.Do(patchDirPath, mountpoint)
+		err := di3fs.Do(dimgPaths, mountpoint, mountDoneChan)
 		if err != nil {
 			log.G(ctx).WithFields(logrus.Fields{
-				"patchDirPath": patchDirPath,
+				"dimgPaths": dimgPaths,
 			}).Errorf("failed to mount di3fs : %v", err)
 		}
 	}()
+	// wait for the mount to be done
+	<-mountDoneChan
 	return nil
 }
 

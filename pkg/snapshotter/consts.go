@@ -20,20 +20,23 @@ const SnapshotLabelRefLayer = "containerd.io/snapshot/di3fs.ref.layer"
 const SnapshotLabelImageName = "containerd.io/snapshot/di3fs.image.name"
 const SnapshotLabelImageVersion = "containerd.io/snapshot/di3fs.image.version"
 const SnapshotLabelMount = "containerd.io/snapshot/di3fs.mount"
+const SnapshotLabelTempDimg = "containerd.io/snapshot/di3fs.tempDimg"
 const NerverGC = "containerd.io/gc.root"
 const TargetSnapshotLabel = "containerd.io/snapshot.ref"
 
-func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDigest, dimgDigest *digest.Digest, imageName string) error {
+func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDigest, dimgDigest *digest.Digest, imageName string, dimgPath string) error {
 	opts := snapshots.WithLabels(map[string]string{
 		NerverGC:                     "hogehoge",
 		SnapshotLabelRefImage:        manifestDigest.String(),
 		SnapshotLabelRefLayer:        fmt.Sprintf("%d", 0),
 		SnapshotLabelRefUncompressed: dimgDigest.String(),
 		SnapshotLabelImageName:       imageName,
+		SnapshotLabelTempDimg:        dimgPath,
 		//targetSnapshotLabel:          chain.Hex(),
 		//remoteLabel:                  "true",
 	})
 
+	log.G(ctx).Infof("IMAGE[%s] digest=%s", imageName, dimgDigest)
 	randId := utils.GetRandomId("di3fs")
 	// ignore error
 	// TODO: handle this correctly

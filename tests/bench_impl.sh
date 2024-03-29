@@ -66,7 +66,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_FUSE --baseDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
+		$BIN_FUSE --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
 		sleep 1
 		if [ $j -eq 0 ]; then
 			diff -r $UPPER /tmp/fuse --no-dereference
@@ -93,14 +93,14 @@ MERGED=$IMAGE_LOWER-$IMAGE_UPPER
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark merge $MERGE_LOWER and $MERGE_UPPER to $MERGED ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI merge --lowerDimg=./diff_$MERGE_LOWER.dimg --upperDimg=./diff_$MERGE_UPPER.dimg --outDimg=./diff_merged_$MERGED.dimg --benchmark
+	$BIN_CTR_CLI dimg merge --lowerDimg=./diff_$MERGE_LOWER.dimg --upperDimg=./diff_$MERGE_UPPER.dimg --outDimg=./diff_merged_$MERGED.dimg --benchmark
 done
 
 echo "Testing merged $MERGED"
 $BIN_CTR_CLI dimg patch --baseDir=./$IMAGE_LOWER --outDir=./$IMAGE_UPPER-merged --diffDimg=./diff_merged_$MERGED.dimg
 diff -r $IMAGE_UPPER $IMAGE_UPPER-merged --no-dereference
 ls -l diff_merged_$MERGED.dimg
-$BIN_FUSE --baseDimg=./$IMAGE_LOWER.dimg --diffDimg=./diff_merged_$MERGED.dimg /tmp/fuse >/dev/null 2>&1 &
+$BIN_FUSE --parentDimg=./$IMAGE_LOWER.dimg --diffDimg=./diff_merged_$MERGED.dimg /tmp/fuse >/dev/null 2>&1 &
 sleep 1
 diff -r $IMAGE_UPPER /tmp/fuse --no-dereference
 fusermount3 -u /tmp/fuse

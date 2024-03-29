@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -61,8 +60,10 @@ func main() {
 	bench := flag.Bool("benchmark", false, "measure benchmark")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to this file")
 	memprofile := flag.String("memprofile", "", "write memory profile to this file")
-	baseDimg := flag.String("baseDimg", "", "base directory to be patched")
-	diffDimg := flag.String("diffDimg", "", "patch directory")
+	parentDimg := flag.String("parentDimg", "", "path to parent dimg")
+	diffDimg := flag.String("diffDimg", "", "path to diff dimg")
+	parentCdimg := flag.String("parentCdimg", "", "path to parent cdimg")
+	diffCdimg := flag.String("diffCdimg", "", "path to diff cdimg")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Printf("usage: %s MOUNTPOINT\n", path.Base(os.Args[0]))
@@ -102,43 +103,46 @@ func main() {
 		fmt.Printf("Note: You must unmount gracefully, otherwise the profile file(s) will stay empty!\n")
 	}
 
-	if *diffDimg == "" {
-		fmt.Println("please specify diffDimg")
+	if *diffDimg == "" && *diffCdimg == "" {
+		fmt.Println("please specify '--diffDimg' or '--diffCdimg'")
 		os.Exit(1)
 	}
-	diffDimgAbs, err := filepath.Abs(*diffDimg)
-	if err != nil {
-		panic(err)
-	}
 
-	diffImageFile, err := image.OpenDimgFile(diffDimgAbs)
-	if err != nil {
-		panic(err)
-	}
-	var baseImageFile *image.DimgFile = nil
-
-	baseNeeded := diffImageFile.Header().BaseId != ""
-	if baseNeeded {
-		var baseDimgAbs string
-		if *baseDimg != "" {
-			baseDimgAbs, err = filepath.Abs(*baseDimg)
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			imageStore, _ := filepath.Split(diffDimgAbs)
-			baseDimgAbs = filepath.Join(imageStore, diffImageFile.Header().BaseId+".dimg")
-		}
-		baseImageFile, err = image.OpenDimgFile(baseDimgAbs)
+	var diffImageFile *image.DimgFile = nil
+	if *diffDimg != "" {
+		diffImageFile, err = image.OpenDimgFile(*diffDimg)
 		if err != nil {
 			panic(err)
 		}
-		baseNeeded = false
+		defer diffImageFile.Close()
+	} else {
+		diffCdimgFile, err := image.OpenCdimgFile(*diffCdimg)
+		if err != nil {
+			panic(err)
+		}
+		defer diffCdimgFile.Close()
+		diffImageFile = diffCdimgFile.Dimg
 	}
 
-	if baseNeeded && *baseDimg == "" {
-		fmt.Println("please specify baseDimg")
+	parentNeeded := diffImageFile.Header().ParentId != ""
+	if parentNeeded && *parentDimg == "" && *parentCdimg == "" {
+		fmt.Println("please specify '--parentDimg' or '--parentCdimg'")
 		os.Exit(1)
+	}
+
+	var parentImageFile *image.DimgFile = nil
+	if *parentDimg != "" {
+		parentImageFile, err = image.OpenDimgFile(*parentDimg)
+		if err != nil {
+			panic(err)
+		}
+		defer parentImageFile.Close()
+	} else {
+		parentCdimgFile, err := image.OpenCdimgFile(*parentCdimg)
+		if err != nil {
+			panic(err)
+		}
+		parentImageFile = parentCdimgFile.Dimg
 	}
 
 	sec := time.Second
@@ -166,7 +170,7 @@ func main() {
 	// Leave file permissions on "000" files as-is
 	opts.NullPermissions = true
 
-	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []*image.DimgFile{baseImageFile}, diffImageFile)
+	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []*image.DimgFile{parentImageFile}, diffImageFile)
 	if err != nil {
 		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
 	}
@@ -183,7 +187,7 @@ func main() {
 			TaskName:     "di3fs",
 			ElapsedMilli: int(elapsedMilli),
 			Labels: []string{
-				"base:" + *baseDimg,
+				"parent:" + *parentDimg,
 				"patch:" + *diffDimg,
 			},
 		}

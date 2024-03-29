@@ -14,33 +14,42 @@ import (
 
 var logger = log.G(context.TODO())
 
-var (
-	Flags = []cli.Flag{
-		&cli.StringFlag{
-			Name:     "lowerDimg",
-			Usage:    "path to lower dimg",
-			Required: true,
+func DimgCommand() *cli.Command {
+	cmd := cli.Command{
+		Name:  "merge",
+		Usage: "merge dimgs",
+		Action: func(context *cli.Context) error {
+			return dimgAction(context)
 		},
-		&cli.StringFlag{
-			Name:     "upperDimg",
-			Usage:    "path to upper dimg",
-			Required: true,
-		},
-		&cli.StringFlag{
-			Name:     "outDimg",
-			Usage:    "path to merged dimg",
-			Required: true,
-		},
-		&cli.BoolFlag{
-			Name:     "benchmark",
-			Usage:    "enable benchmark",
-			Value:    false,
-			Required: false,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "lowerDimg",
+				Usage:    "path to lower dimg",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "upperDimg",
+				Usage:    "path to upper dimg",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "outDimg",
+				Usage:    "path to merged dimg",
+				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:     "benchmark",
+				Usage:    "enable benchmark",
+				Value:    false,
+				Required: false,
+			},
 		},
 	}
-)
 
-func Action(c *cli.Context) error {
+	return &cmd
+}
+
+func dimgAction(c *cli.Context) error {
 	logger.Logger.SetLevel(logrus.WarnLevel)
 	lowerDimg := c.String("lowerDimg")
 	upperDimg := c.String("upperDimg")
@@ -69,7 +78,7 @@ func Action(c *cli.Context) error {
 		panic(err)
 	}
 	defer mergeFile.Close()
-	err = image.MergeDimg(lowerDimg, upperDimg, mergeFile)
+	_, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile)
 	if err != nil {
 		panic(err)
 	}
@@ -93,15 +102,90 @@ func Action(c *cli.Context) error {
 	return nil
 }
 
-func Command() *cli.Command {
+func CdimgCommand() *cli.Command {
 	cmd := cli.Command{
 		Name:  "merge",
-		Usage: "merge dimgs",
+		Usage: "merge cdimgs",
 		Action: func(context *cli.Context) error {
-			return Action(context)
+			return cdimgAction(context)
 		},
-		Flags: Flags,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "lowerCdimg",
+				Usage:    "path to lower cdimg",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "upperCdimg",
+				Usage:    "path to upper cdimg",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "outCdimg",
+				Usage:    "path to merged cdimg",
+				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:     "benchmark",
+				Usage:    "enable benchmark",
+				Value:    false,
+				Required: false,
+			},
+		},
 	}
 
 	return &cmd
+}
+
+func cdimgAction(c *cli.Context) error {
+	logger.Logger.SetLevel(logrus.WarnLevel)
+	lowerCdimg := c.String("lowerCdimg")
+	upperCdimg := c.String("upperCdimg")
+	outCdimg := c.String("outCdimg")
+	enableBench := c.Bool("benchmark")
+	logger.WithFields(logrus.Fields{
+		"lowerCdimg": lowerCdimg,
+		"upperCdimg": upperCdimg,
+		"outCdimg":   outCdimg,
+	}).Info("starting to merge")
+
+	var b *benchmark.Benchmark = nil
+	var err error
+	if enableBench {
+		b, err = benchmark.NewBenchmark("./benchmark.log")
+		if err != nil {
+			return err
+		}
+		defer b.Close()
+	}
+
+	start := time.Now()
+
+	mergeFile, err := os.Create(outCdimg)
+	if err != nil {
+		panic(err)
+	}
+	defer mergeFile.Close()
+	err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile)
+	if err != nil {
+		panic(err)
+	}
+
+	if b != nil {
+		metric := benchmark.Metric{
+			TaskName:     "patch",
+			ElapsedMilli: int(time.Since(start).Milliseconds()),
+			Labels: []string{
+				"lowerCdimg:" + lowerCdimg,
+				"upperCdimg:" + upperCdimg,
+				"outCdimg:" + outCdimg,
+			},
+		}
+		err = b.AppendResult(metric)
+		if err != nil {
+			panic(err)
+		}
+	}
+	logger.Info("merge done")
+	return nil
 }

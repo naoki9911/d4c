@@ -11,6 +11,7 @@ import (
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/pack"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/patch"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/pull"
+	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/show"
 	"github.com/urfave/cli/v2"
 )
 
@@ -38,7 +39,6 @@ func NewApp() *cli.App {
 		pack.Command(),
 		load.Command(),
 		pull.Command(),
-		merge.Command(),
 	}
 
 	return app
@@ -52,6 +52,8 @@ func dimgCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			patch.DimgCommand(),
 			diff.DimgCommand(),
+			merge.DimgCommand(),
+			show.DimgCommand(),
 		},
 	}
 	return &cmd
@@ -65,6 +67,8 @@ func cdimgCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			patch.CdimgCommand(),
 			diff.CdimgCommand(),
+			merge.CdimgCommand(),
+			show.CdimgCommand(),
 		},
 	}
 	return &cmd

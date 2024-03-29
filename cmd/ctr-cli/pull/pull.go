@@ -19,6 +19,7 @@ import (
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	sns "github.com/naoki9911/fuse-diff-containerd/pkg/snapshotter"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/update"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
@@ -185,7 +186,7 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 	}
 	logger.WithField("dimgSize", header.Head.DimgSize).Debug("got image header")
 
-	dimgPath := filepath.Join(snClient.SnImageStorePath, header.DimgDigest.String()+".dimg")
+	dimgPath := filepath.Join(os.TempDir(), utils.GetRandomId("d4c-snapshotter")+".dimg")
 	dimgFile, err := os.Create(dimgPath)
 	if err != nil {
 		return fmt.Errorf("failed to create dimg at %s: %v", dimgPath, err)
@@ -215,7 +216,7 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 		}
 	}
 
-	err = load.LoadImage(snClient, context.TODO(), reqImgName, reqImgVersion, header)
+	err = load.LoadImage(snClient, context.TODO(), reqImgName, reqImgVersion, header, dimgPath)
 	if err != nil {
 		return fmt.Errorf("failed to load image: %v", err)
 	}

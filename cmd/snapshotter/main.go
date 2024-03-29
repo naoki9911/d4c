@@ -29,12 +29,11 @@ type Client struct {
 
 	ctr *containerd.Client
 
-	snRootPath       string
-	snImageStorePath string
-	snSocketPath     string
-	snGrpcServer     *grpc.Server
-	snSnapshotter    *snapshotter
-	snListener       net.Listener
+	snRootPath    string
+	snSocketPath  string
+	snGrpcServer  *grpc.Server
+	snSnapshotter *snapshotter
+	snListener    net.Listener
 }
 
 func unmountDi3FS() error {
@@ -98,8 +97,6 @@ func NewClient() (*Client, error) {
 		snSocketPath: "/run/di3fs/snapshotter.sock",
 	}
 
-	c.snImageStorePath = filepath.Join(c.snRootPath, "images")
-
 	return c, nil
 }
 
@@ -115,7 +112,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	di3fsMgr := NewDi3FSManager()
+	// remove all current state
+	if err = os.RemoveAll(client.snRootPath); err != nil {
+		log.G(context.TODO()).WithError(err).Errorf("failed to remove %q", client.snRootPath)
+		os.Exit(1)
+	}
+
+	di3fsMgr, err := NewDi3FSManager(filepath.Join(client.snRootPath, "images"))
+	if err != nil {
+		log.G(context.TODO()).WithError(err).Error("failed to create Di3FSManager")
+		os.Exit(1)
+	}
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
@@ -143,20 +151,14 @@ func (c *Client) initSnapshotter(mgr *Di3FSManager) error {
 		log.G(context.TODO()).WithError(err).Error("failed to remove images")
 		os.Exit(1)
 	}
-	if err = os.RemoveAll(c.snRootPath); err != nil {
-		return errors.Wrapf(err, "failed to remove %q", c.snRootPath)
-	}
+
 	if err = os.MkdirAll(c.snRootPath, 0755); err != nil {
-		return errors.Wrapf(err, "failed to create directory %q", c.snRootPath)
-	}
-	if err = os.MkdirAll(c.snImageStorePath, 0755); err != nil {
 		return errors.Wrapf(err, "failed to create directory %q", c.snRootPath)
 	}
 	c.snSnapshotter, err = NewSnapshotter(c.ctx, c.snRootPath, mgr)
 	if err != nil {
 		return err
 	}
-
 	svc := snapshotservice.FromSnapshotter(c.snSnapshotter)
 	socketDir := filepath.Dir(c.snSocketPath)
 	if err = os.MkdirAll(socketDir, 0700); err != nil {

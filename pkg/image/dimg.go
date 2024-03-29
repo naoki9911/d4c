@@ -9,11 +9,21 @@ import (
 	"os"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/opencontainers/go-digest"
 )
 
 type DimgHeader struct {
-	BaseId    string    `json:"baseID"`
-	FileEntry FileEntry `json:"fileEntry"`
+	Id        digest.Digest `json:"id"` // generated when the full image generated
+	ParentId  digest.Digest `json:"parentID"`
+	FileEntry FileEntry     `json:"fileEntry"`
+}
+
+func (dh *DimgHeader) Digest() digest.Digest {
+	dhBytes, err := json.Marshal(dh)
+	if err != nil {
+		panic(err)
+	}
+	return digest.FromBytes(dhBytes)
 }
 
 type DimgFile struct {
