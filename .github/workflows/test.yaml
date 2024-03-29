@@ -131,6 +131,40 @@ jobs:
           name: benchmark-${{ matrix.script }}
           path: /tmp/benchmark-results
 
+  benchmark-cdimg:
+    runs-on: ubuntu-22.04
+    needs: sync
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        script: ["apache", "mysql", "nginx", "postgres", "redis"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup lxd
+        run: ./tests/setup_lxd.sh
+      - uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+         key: lxc-image-${{ github.sha }}
+         path: /tmp/test-image.tar.zst
+         fail-on-cache-miss: true
+      - name: load lxc image
+        run: sudo lxc image import /tmp/test-image.tar.zst --alias test-export
+      - name: launch lxc container
+        run: ./tests/launch_test_lxc.sh test-export
+      - name: run benchmark (${{ matrix.script }})
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_cdimg_lxc.sh ${{ matrix.script }}"
+      - name: get result
+        id: get_result
+        run: |
+          mkdir /tmp/benchmark-results
+          sudo lxc file pull test/home/ubuntu/d4c/tests/benchmark/${{ matrix.script }}-benchmark.log /tmp/benchmark-results/.
+      - uses: actions/upload-artifact@v4
+        if: steps.get_result.conclusion == 'success'
+        with:
+          name: benchmark-cdimg-${{ matrix.script }}
+          path: /tmp/benchmark-results
+
   benchmark-all:
     runs-on: ubuntu-22.04
     needs: sync
