@@ -2,6 +2,7 @@ package diff
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/containerd/containerd/log"
@@ -111,13 +112,15 @@ func dimgAction(c *cli.Context) error {
 
 	if b != nil {
 		metric := benchmark.Metric{
-			TaskName:     "patch",
+			TaskName:     "diff",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: []string{
-				"oldDimg" + oldDimg,
-				"newDimg" + newDimg,
-				"outDimg" + outDimg,
-				"mode" + mode,
+				"oldDimg:" + oldDimg,
+				"newDimg:" + newDimg,
+				"outDimg:" + outDimg,
+				"mode:" + mode,
+				"threadNum:" + strconv.Itoa(threadNum),
+				"threadSchedMode:" + threadSchedMode,
 			},
 		}
 		err = b.AppendResult(metric)
@@ -224,13 +227,15 @@ func cdimgAction(c *cli.Context) error {
 
 	if b != nil {
 		metric := benchmark.Metric{
-			TaskName:     "patch",
+			TaskName:     "diff",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: []string{
-				"oldCdimg" + oldCdimg,
-				"newCdimg" + newCdimg,
-				"outCdimg" + outCdimg,
-				"mode" + mode,
+				"oldCdimg:" + oldCdimg,
+				"newCdimg:" + newCdimg,
+				"outCdimg:" + outCdimg,
+				"mode:" + mode,
+				"threadNum:" + strconv.Itoa(threadNum),
+				"threadSchedMode:" + threadSchedMode,
 			},
 		}
 		err = b.AppendResult(metric)

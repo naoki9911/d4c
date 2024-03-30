@@ -105,6 +105,7 @@ jobs:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
         thread: ["1", "4"]
+        sched: ["none", "size-ordered"]
     steps:
       - uses: actions/checkout@v4
       - name: setup lxd
@@ -120,7 +121,7 @@ jobs:
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark (${{ matrix.script }})
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_lxc.sh ${{ matrix.script }} ${{ matrix.thread }}"
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_lxc.sh ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }}"
       - name: get result
         id: get_result
         run: |
@@ -129,7 +130,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.get_result.conclusion == 'success'
         with:
-          name: benchmark-${{ matrix.script }}-thread-${{ matrix.thread }}
+          name: benchmark-${{ matrix.script }}-thread-${{ matrix.thread }}-sched-${{ matrix.sched }}
           path: /tmp/benchmark-results
 
   benchmark-cdimg:
@@ -140,6 +141,7 @@ jobs:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
         thread: ["1", "4"]
+        sched: ["none", "size-ordered"]
     steps:
       - uses: actions/checkout@v4
       - name: setup lxd
@@ -155,7 +157,7 @@ jobs:
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark (${{ matrix.script }} with ${{ matrix.thread}} threads)
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_cdimg_lxc.sh ${{ matrix.script }} ${{ matrix.thread }}"
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_cdimg_lxc.sh ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }}"
       - name: get result
         id: get_result
         run: |
@@ -164,7 +166,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.get_result.conclusion == 'success'
         with:
-          name: benchmark-cdimg-${{ matrix.script }}-thread-${{ matrix.thread }}
+          name: benchmark-cdimg-${{ matrix.script }}-thread-${{ matrix.thread }}-sched-${{ matrix.sched }}
           path: /tmp/benchmark-results
 
   benchmark-all:
@@ -174,6 +176,7 @@ jobs:
     strategy:
       matrix:
         thread: ["1", "4"]
+        sched: ["none", "size-ordered"]
     steps:
       - uses: actions/checkout@v4
       - name: setup lxd
@@ -303,4 +306,4 @@ jobs:
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench.sh ${{ matrix.thread }}"
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench.sh ${{ matrix.thread }} ${{ matrix.sched }}"

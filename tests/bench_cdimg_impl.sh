@@ -13,6 +13,7 @@ TEST_SCRIPT=$1
 IMAGE_DIR=$2
 RUN_NUM=$3
 THREAD_NUM=${4:-1}
+SCHED_MODE=${5:-"none"}
 
 source $TEST_SCRIPT
 
@@ -51,7 +52,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI cdimg diff --oldCdimg=./$LOWER.cdimg --newCdimg=./$UPPER.cdimg --outCdimg=./diff_$DIFF_NAME.cdimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM
+		$BIN_CTR_CLI cdimg diff --oldCdimg=./$LOWER.cdimg --newCdimg=./$UPPER.cdimg --outCdimg=./diff_$DIFF_NAME.cdimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
 	done
 
 	# packing diff data
@@ -81,7 +82,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME file-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI cdimg diff --oldCdimg=./$LOWER.cdimg --newCdimg=./$UPPER.cdimg --outCdimg=./diff_file_$DIFF_NAME.cdimg --mode=file-diff --benchmark --threadNum $THREAD_NUM
+		$BIN_CTR_CLI cdimg diff --oldCdimg=./$LOWER.cdimg --newCdimg=./$UPPER.cdimg --outCdimg=./diff_file_$DIFF_NAME.cdimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
 	done
 
 	# packing diff data and test it
@@ -111,14 +112,14 @@ fusermount3 -u /tmp/fuse
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED binary-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI cdimg diff --oldCdimg=./$IMAGE_LOWER.cdimg --newCdimg=./$IMAGE_UPPER.cdimg --outCdimg=./diff_$MERGED.cdimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM
+	$BIN_CTR_CLI cdimg diff --oldCdimg=./$IMAGE_LOWER.cdimg --newCdimg=./$IMAGE_UPPER.cdimg --outCdimg=./diff_$MERGED.cdimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
 done
 ls -l diff_$MERGED.cdimg
 
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED file-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI cdimg diff --oldCdimg=./$IMAGE_LOWER.cdimg --newCdimg=./$IMAGE_UPPER.cdimg --outCdimg=./diff_file_$MERGED.cdimg --mode=file-diff --benchmark --threadNum $THREAD_NUM
+	$BIN_CTR_CLI cdimg diff --oldCdimg=./$IMAGE_LOWER.cdimg --newCdimg=./$IMAGE_UPPER.cdimg --outCdimg=./diff_file_$MERGED.cdimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
 done
 ls -l diff_file_$MERGED.cdimg
 

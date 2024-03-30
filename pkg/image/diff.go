@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/icedream/go-bsdiff"
@@ -136,21 +137,81 @@ func (dc *DiffMultihreadConfig) Validate() error {
 	return nil
 }
 
+type diffTaskQueue struct {
+	taskChan  chan diffTask
+	taskArray []diffTask
+	wgQ       sync.WaitGroup
+}
+
+func newDiffTaskQueue() *diffTaskQueue {
+	dq := &diffTaskQueue{
+		wgQ: sync.WaitGroup{},
+	}
+	dq.wgQ.Add(1)
+	return dq
+}
+
+func (dq *diffTaskQueue) Enqueue(dt diffTask) {
+	if dq.taskChan != nil {
+		dq.taskChan <- dt
+	} else {
+		dq.taskArray = append(dq.taskArray, dt)
+	}
+}
+
+func (dq *diffTaskQueue) Close() {
+	dq.wgQ.Done()
+	if dq.taskChan != nil {
+		close(dq.taskChan)
+	}
+}
+
 func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffMultihreadConfig) error {
 	diffTasks := make(chan diffTask, 1000)
 	writeTasks := make(chan diffTask, 1000)
 	wg := sync.WaitGroup{}
 
+	diffTaskQueue := newDiffTaskQueue()
+	if dc.ScheduleMode == DIFF_MULTI_SCHED_NONE {
+		diffTaskQueue.taskChan = diffTasks
+	} else if dc.ScheduleMode == DIFF_MULTI_SCHED_SIZE_ORDERED {
+		diffTaskQueue.taskArray = make([]diffTask, 0)
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
 		logger.Info("started diff task enqueu thread")
-		err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, oldEntry, newEntry, diffTasks)
+		err := enqueueDiffTaskToQueue(oldDimgFile, newDimgFile, oldEntry, newEntry, diffTaskQueue)
 		if err != nil {
 			logger.Errorf("failed to enque: %v", err)
 		}
-		close(diffTasks)
+		diffTaskQueue.Close()
 		logger.Info("finished diff task enqueu thread")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		diffTaskQueue.wgQ.Wait()
+		if diffTaskQueue.taskArray == nil {
+			return
+		}
+		if dc.ScheduleMode == DIFF_MULTI_SCHED_SIZE_ORDERED {
+			// process larger file first
+			sort.Slice(diffTaskQueue.taskArray, func(i int, j int) bool {
+				return diffTaskQueue.taskArray[i].newEntry.Size > diffTaskQueue.taskArray[j].newEntry.Size
+			})
+			//logger.Infof("%d %d %d", diffTaskQueue.taskArray[0].newEntry.Size, diffTaskQueue.taskArray[1].newEntry.Size, diffTaskQueue.taskArray[2].newEntry.Size)
+			logger.Infof("task was ordered in size")
+		}
+
+		for i := range diffTaskQueue.taskArray {
+			diffTasks <- diffTaskQueue.taskArray[i]
+		}
+		close(diffTasks)
+		logger.Info("all task was sent to diff channel")
 	}()
 
 	wg.Add(1)
@@ -289,7 +350,7 @@ func updateDirFileEntry(entry *FileEntry) {
 	}
 }
 
-func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, taskChan chan diffTask) error {
+func enqueueDiffTaskToQueue(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, taskQ *diffTaskQueue) error {
 	for fName := range newEntry.Childs {
 		newChildEntry := newEntry.Childs[fName]
 		if newChildEntry.Type == FILE_ENTRY_FILE_SAME ||
@@ -306,15 +367,15 @@ func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newE
 		// newly created file or directory
 		if oldEntry == nil {
 			if newChildEntry.IsDir() {
-				err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, nil, newChildEntry, taskChan)
+				err := enqueueDiffTaskToQueue(oldDimgFile, newDimgFile, nil, newChildEntry, taskQ)
 				if err != nil {
 					return err
 				}
 			} else {
-				taskChan <- diffTask{
+				taskQ.Enqueue(diffTask{
 					oldEntry: nil,
 					newEntry: newChildEntry,
-				}
+				})
 			}
 
 			continue
@@ -327,15 +388,15 @@ func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newE
 			oldChildEntry.Name != newChildEntry.Name ||
 			oldChildEntry.Type != newChildEntry.Type {
 			if newChildEntry.IsDir() {
-				err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, nil, newChildEntry, taskChan)
+				err := enqueueDiffTaskToQueue(oldDimgFile, newDimgFile, nil, newChildEntry, taskQ)
 				if err != nil {
 					return err
 				}
 			} else {
-				taskChan <- diffTask{
+				taskQ.Enqueue(diffTask{
 					oldEntry: nil,
 					newEntry: newChildEntry,
-				}
+				})
 			}
 
 			continue
@@ -343,7 +404,7 @@ func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newE
 
 		// if both new and old are directory, recursively generate diff
 		if newChildEntry.IsDir() {
-			err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, oldChildEntry, newChildEntry, taskChan)
+			err := enqueueDiffTaskToQueue(oldDimgFile, newDimgFile, oldChildEntry, newChildEntry, taskQ)
 			if err != nil {
 				return err
 			}
@@ -351,10 +412,10 @@ func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newE
 			continue
 		}
 
-		taskChan <- diffTask{
+		taskQ.Enqueue(diffTask{
 			oldEntry: oldChildEntry,
 			newEntry: newChildEntry,
-		}
+		})
 	}
 	return nil
 }
