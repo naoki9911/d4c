@@ -51,6 +51,18 @@ func DimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.IntFlag{
+				Name:     "threadNum",
+				Usage:    "The number of threads to process",
+				Value:    1,
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "threadSchedMode",
+				Usage:    "Multithread scheduling mode",
+				Value:    "none",
+				Required: false,
+			},
 		},
 	}
 
@@ -58,11 +70,12 @@ func DimgCommand() *cli.Command {
 }
 
 func dimgAction(c *cli.Context) error {
-	logger.Logger.SetLevel(logrus.WarnLevel)
 	oldDimg := c.String("oldDimg")
 	newDimg := c.String("newDimg")
 	outDimg := c.String("outDimg")
 	mode := c.String("mode")
+	threadNum := c.Int("threadNum")
+	threadSchedMode := c.String("threadSchedMode")
 	enableBench := c.Bool("benchmark")
 	logger.WithFields(logrus.Fields{
 		"oldDimg": oldDimg,
@@ -87,7 +100,11 @@ func dimgAction(c *cli.Context) error {
 
 	start := time.Now()
 
-	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary)
+	dc := image.DiffMultihreadConfig{
+		ThreadNum:    threadNum,
+		ScheduleMode: threadSchedMode,
+	}
+	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc)
 	if err != nil {
 		panic(err)
 	}
@@ -147,6 +164,18 @@ func CdimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.IntFlag{
+				Name:     "threadNum",
+				Usage:    "The number of threads to process",
+				Value:    1,
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "threadSchedMode",
+				Usage:    "Multithread scheduling mode",
+				Value:    "none",
+				Required: false,
+			},
 		},
 	}
 
@@ -154,12 +183,13 @@ func CdimgCommand() *cli.Command {
 }
 
 func cdimgAction(c *cli.Context) error {
-	logger.Logger.SetLevel(logrus.WarnLevel)
 	oldCdimg := c.String("oldCdimg")
 	newCdimg := c.String("newCdimg")
 	outCdimg := c.String("outCdimg")
 	mode := c.String("mode")
 	enableBench := c.Bool("benchmark")
+	threadNum := c.Int("threadNum")
+	threadSchedMode := c.String("threadSchedMode")
 	logger.WithFields(logrus.Fields{
 		"oldCdimg": oldCdimg,
 		"newCdimg": newCdimg,
@@ -183,7 +213,11 @@ func cdimgAction(c *cli.Context) error {
 
 	start := time.Now()
 
-	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary)
+	dc := image.DiffMultihreadConfig{
+		ThreadNum:    threadNum,
+		ScheduleMode: threadSchedMode,
+	}
+	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary, dc)
 	if err != nil {
 		panic(err)
 	}

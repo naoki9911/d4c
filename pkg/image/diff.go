@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/icedream/go-bsdiff"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
@@ -19,7 +20,7 @@ func getFileSize(path string) (int, error) {
 	return int(fileInfo.Size()), nil
 }
 
-func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool) error {
+func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffMultihreadConfig) error {
 	oldDimg, err := OpenDimgFile(oldDimgPath)
 	if err != nil {
 		return err
@@ -39,7 +40,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer diffFile.Close()
 
 	diffOut := bytes.Buffer{}
-	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff, dc)
 	if err != nil {
 		return err
 	}
@@ -58,7 +59,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	return nil
 }
 
-func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool) error {
+func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool, dc DiffMultihreadConfig) error {
 	oldCdimg, err := OpenCdimgFile(oldCdimgPath)
 	if err != nil {
 		return err
@@ -80,7 +81,7 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 	defer diffCdimg.Close()
 
 	diffOut := bytes.Buffer{}
-	_, err = generateDiffFromDimg(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff, dc)
 	if err != nil {
 		return err
 	}
@@ -108,15 +109,192 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 	return nil
 }
 
-// @return bool: is entirly new ?
-func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool) (bool, error) {
-	entireNew := true
+type diffTask struct {
+	oldEntry *FileEntry
+	newEntry *FileEntry
+	data     []byte
+}
 
+const (
+	DIFF_MULTI_SCHED_NONE         = "none"
+	DIFF_MULTI_SCHED_SIZE_ORDERED = "size-ordered"
+)
+
+type DiffMultihreadConfig struct {
+	ThreadNum    int
+	ScheduleMode string
+}
+
+func (dc *DiffMultihreadConfig) Validate() error {
+	if dc.ThreadNum <= 0 {
+		return fmt.Errorf("invalid ThreadNum: %d", dc.ThreadNum)
+	}
+
+	if dc.ScheduleMode != DIFF_MULTI_SCHED_NONE && dc.ScheduleMode != DIFF_MULTI_SCHED_SIZE_ORDERED {
+		return fmt.Errorf("invalid ScheduleMode: %s", dc.ScheduleMode)
+	}
+	return nil
+}
+
+func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffMultihreadConfig) error {
+	diffTasks := make(chan diffTask, 1000)
+	writeTasks := make(chan diffTask, 1000)
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("started diff task enqueu thread")
+		err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, oldEntry, newEntry, diffTasks)
+		if err != nil {
+			logger.Errorf("failed to enque: %v", err)
+		}
+		close(diffTasks)
+		logger.Info("finished diff task enqueu thread")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("started diff write thread")
+		for {
+			wt, more := <-writeTasks
+			if !more {
+				break
+			}
+			wt.newEntry.Offset = int64(diffBody.Len())
+			_, err := diffBody.Write(wt.data)
+			if err != nil {
+				logger.Errorf("failed to write to diffBody: %v", err)
+				return
+			}
+		}
+		logger.Info("finished diff write thread")
+	}()
+
+	compWg := sync.WaitGroup{}
+	for i := 0; i < dc.ThreadNum; i++ {
+		wg.Add(1)
+		compWg.Add(1)
+		go func(threadId int) {
+			logger.Infof("started diff thread idx=%d", threadId)
+			defer wg.Done()
+			defer compWg.Done()
+			for {
+				dt, more := <-diffTasks
+				if !more {
+					break
+				}
+
+				if dt.oldEntry == nil {
+					dt.data = make([]byte, dt.newEntry.CompressedSize)
+					_, err := newDimgFile.ReadAt(dt.data, dt.newEntry.Offset)
+					if err != nil {
+						logger.Errorf("failed to read from newDimgFile at 0x%x: %v", dt.newEntry.Offset, err)
+						break
+					}
+				} else {
+					newCompressedBytes := make([]byte, dt.newEntry.CompressedSize)
+					_, err := newDimgFile.ReadAt(newCompressedBytes, dt.newEntry.Offset)
+					if err != nil {
+						logger.Errorf("failed to read from newDimgFile at 0x%x: %v", dt.newEntry.Offset, err)
+						break
+					}
+					newBytes, err := utils.DecompressWithZstd(newCompressedBytes)
+					if err != nil {
+						logger.Errorf("failed to decompress newBytes: %v", err)
+						break
+					}
+
+					oldCompressedBytes := make([]byte, dt.oldEntry.CompressedSize)
+					_, err = oldDimgFile.ReadAt(oldCompressedBytes, dt.oldEntry.Offset)
+					if err != nil {
+						logger.Errorf("failed to read from oldDimgFile at 0x%x: %v", dt.oldEntry.Offset, err)
+						break
+					}
+					oldBytes, err := utils.DecompressWithZstd(oldCompressedBytes)
+					if err != nil {
+						logger.Errorf("failed to decompress oldBytes: %v", err)
+						break
+					}
+					isSame := bytes.Equal(newBytes, oldBytes)
+					if isSame {
+						dt.newEntry.Type = FILE_ENTRY_FILE_SAME
+						dt.newEntry.CompressedSize = 0
+						continue
+					}
+					if len(oldBytes) > 0 && isBinaryDiff {
+						// old File may be 0-bytes
+						diffWriter := new(bytes.Buffer)
+						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
+						err = bsdiff.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), diffWriter)
+						if err != nil {
+							logger.Errorf("failed to bsdiff.Diff: %v", err)
+							break
+						}
+						dt.newEntry.Type = FILE_ENTRY_FILE_DIFF
+						dt.newEntry.CompressedSize = int64(diffWriter.Len())
+						dt.data = diffWriter.Bytes()
+					} else {
+						dt.newEntry.Type = FILE_ENTRY_FILE_NEW
+						dt.data = make([]byte, dt.newEntry.CompressedSize)
+						_, err := newDimgFile.ReadAt(dt.data, dt.newEntry.Offset)
+						if err != nil {
+							logger.Errorf("failed to read from newDimgFile at 0x%x: %v", dt.newEntry.Offset, err)
+							break
+						}
+					}
+				}
+				writeTasks <- dt
+			}
+			logger.Infof("finished diff thread idx=%d", threadId)
+		}(i)
+	}
+
+	go func() {
+		compWg.Wait()
+		close(writeTasks)
+		logger.Infof("all diff tasks finished")
+	}()
+
+	wg.Wait()
+
+	logger.Info("started to update dir entry")
+	updateDirFileEntry(newEntry)
+	logger.Info("finished to update dir entry")
+	return nil
+}
+
+// updates FileEntry.Type to FILE_ENTRY_DIR or FILE_ENTRY_DIR_NEW
+func updateDirFileEntry(entry *FileEntry) {
+	if !entry.IsDir() {
+		return
+	}
+
+	entireNew := true
+	for _, childEntry := range entry.Childs {
+		if childEntry.IsDir() {
+			updateDirFileEntry(childEntry)
+		}
+
+		if !childEntry.IsNew() {
+			entireNew = false
+		}
+	}
+
+	if entireNew {
+		entry.Type = FILE_ENTRY_DIR_NEW
+	} else {
+		entry.Type = FILE_ENTRY_DIR
+	}
+}
+
+func enqueueDiffTaskToChannel(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, taskChan chan diffTask) error {
 	for fName := range newEntry.Childs {
 		newChildEntry := newEntry.Childs[fName]
 		if newChildEntry.Type == FILE_ENTRY_FILE_SAME ||
 			newChildEntry.Type == FILE_ENTRY_FILE_DIFF {
-			return false, fmt.Errorf("invalid dimg")
+			return fmt.Errorf("invalid dimg")
 		}
 
 		if newChildEntry.Type == FILE_ENTRY_OPAQUE ||
@@ -128,20 +306,14 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 		// newly created file or directory
 		if oldEntry == nil {
 			if newChildEntry.IsDir() {
-				_, err := generateDiffFromDimg(oldDimgFile, newDimgFile, nil, newChildEntry, diffBody, isBinaryDiff)
+				err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, nil, newChildEntry, taskChan)
 				if err != nil {
-					return false, err
+					return err
 				}
 			} else {
-				newBytes := make([]byte, newChildEntry.CompressedSize)
-				_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
-				if err != nil {
-					return false, err
-				}
-				newChildEntry.Offset = int64(len(diffBody.Bytes()))
-				_, err = diffBody.Write(newBytes)
-				if err != nil {
-					return false, err
+				taskChan <- diffTask{
+					oldEntry: nil,
+					newEntry: newChildEntry,
 				}
 			}
 
@@ -155,20 +327,14 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 			oldChildEntry.Name != newChildEntry.Name ||
 			oldChildEntry.Type != newChildEntry.Type {
 			if newChildEntry.IsDir() {
-				_, err := generateDiffFromDimg(oldDimgFile, newDimgFile, nil, newChildEntry, diffBody, isBinaryDiff)
+				err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, nil, newChildEntry, taskChan)
 				if err != nil {
-					return false, err
+					return err
 				}
 			} else {
-				newBytes := make([]byte, newChildEntry.CompressedSize)
-				_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
-				if err != nil {
-					return false, err
-				}
-				newChildEntry.Offset = int64(len(diffBody.Bytes()))
-				_, err = diffBody.Write(newBytes)
-				if err != nil {
-					return false, err
+				taskChan <- diffTask{
+					oldEntry: nil,
+					newEntry: newChildEntry,
 				}
 			}
 
@@ -177,79 +343,18 @@ func generateDiffFromDimg(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry
 
 		// if both new and old are directory, recursively generate diff
 		if newChildEntry.IsDir() {
-			new, err := generateDiffFromDimg(oldDimgFile, newDimgFile, oldChildEntry, newChildEntry, diffBody, isBinaryDiff)
+			err := enqueueDiffTaskToChannel(oldDimgFile, newDimgFile, oldChildEntry, newChildEntry, taskChan)
 			if err != nil {
-				return false, err
-			}
-			if !new {
-				entireNew = false
+				return err
 			}
 
 			continue
 		}
 
-		newCompressedBytes := make([]byte, newChildEntry.CompressedSize)
-		_, err := newDimgFile.ReadAt(newCompressedBytes, newChildEntry.Offset)
-		if err != nil {
-			return false, err
-		}
-		newBytes, err := utils.DecompressWithZstd(newCompressedBytes)
-		if err != nil {
-			return false, err
-		}
-
-		oldCompressedBytes := make([]byte, oldChildEntry.CompressedSize)
-		_, err = oldDimgFile.ReadAt(oldCompressedBytes, oldChildEntry.Offset)
-		if err != nil {
-			return false, err
-		}
-		oldBytes, err := utils.DecompressWithZstd(oldCompressedBytes)
-		if err != nil {
-			return false, err
-		}
-		isSame := bytes.Equal(newBytes, oldBytes)
-		if isSame {
-			entireNew = false
-			newChildEntry.Type = FILE_ENTRY_FILE_SAME
-			continue
-		}
-
-		// old File may be 0-bytes
-		if len(oldBytes) > 0 && isBinaryDiff {
-			entireNew = false
-			diffWriter := new(bytes.Buffer)
-			//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-			err = bsdiff.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), diffWriter)
-			if err != nil {
-				return false, err
-			}
-			newChildEntry.Offset = int64(len(diffBody.Bytes()))
-			newChildEntry.CompressedSize = int64(len(diffWriter.Bytes()))
-			_, err = diffBody.Write(diffWriter.Bytes())
-			if err != nil {
-				return false, err
-			}
-			newChildEntry.Type = FILE_ENTRY_FILE_DIFF
-		} else {
-			newBytes := make([]byte, newChildEntry.CompressedSize)
-			_, err := newDimgFile.ReadAt(newBytes, newChildEntry.Offset)
-			if err != nil {
-				return false, err
-			}
-			newChildEntry.Offset = int64(len(diffBody.Bytes()))
-			_, err = diffBody.Write(newBytes)
-			if err != nil {
-				return false, err
-			}
-			newChildEntry.Type = FILE_ENTRY_FILE_NEW
+		taskChan <- diffTask{
+			oldEntry: oldChildEntry,
+			newEntry: newChildEntry,
 		}
 	}
-	if newEntry.IsDir() {
-		if entireNew {
-			newEntry.Type = FILE_ENTRY_DIR_NEW
-		} else {
-			newEntry.Type = FILE_ENTRY_DIR
-		}
-	}
-	return entireNew, nil
+	return nil
 }
