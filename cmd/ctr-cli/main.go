@@ -12,6 +12,7 @@ import (
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/patch"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/pull"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/show"
+	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/util"
 	"github.com/urfave/cli/v2"
 )
 
@@ -39,6 +40,7 @@ func NewApp() *cli.App {
 		pack.Command(),
 		load.Command(),
 		pull.Command(),
+		util.Command(),
 	}
 
 	return app

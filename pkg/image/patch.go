@@ -9,8 +9,8 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/icedream/go-bsdiff"
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	cp "github.com/otiai10/copy"
 )
 
@@ -26,7 +26,7 @@ func applyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 		return err
 	}
 	defer newFile.Close()
-	err = bsdiff.Patch(baseFile, newFile, patch)
+	err = bsdiffx.Patch(baseFile, newFile, patch)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func applyFilePatchForGz(baseFilePath, newFilePath string, patch io.Reader) erro
 
 	gzipNewWriter := gzip.NewWriter(newFile)
 	defer gzipNewWriter.Close()
-	err = bsdiff.Patch(baseFile, gzipNewWriter, patch)
+	err = bsdiffx.Patch(baseFile, gzipNewWriter, patch)
 	if err != nil {
 		return err
 	}

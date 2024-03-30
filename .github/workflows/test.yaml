@@ -305,5 +305,7 @@ jobs:
         run: sudo lxc image import /tmp/test-image.tar.zst --alias test-export
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
+      - name: run test
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/test_bsdiffx.sh"
       - name: run benchmark
         run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench.sh ${{ matrix.thread }} ${{ matrix.sched }}"

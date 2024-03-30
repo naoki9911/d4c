@@ -11,7 +11,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/icedream/go-bsdiff"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 )
 
 var gzipUnpackDiff = true
@@ -63,8 +63,12 @@ func generateFileDiff(baseFilePath, newFilePath string) ([]byte, error) {
 		return nil, err
 	}
 	defer newFile.Close()
+	newFileStat, err := newFile.Stat()
+	if err != nil {
+		return nil, err
+	}
 	writer := new(bytes.Buffer)
-	err = bsdiff.Diff(baseFile, newFile, writer)
+	err = bsdiffx.Diff(baseFile, newFile, newFileStat.Size(), writer)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +91,16 @@ func generateFileDiffFromGzip(baseFilePath, newFilePath string) ([]byte, error) 
 		return nil, err
 	}
 	defer newFile.Close()
+	newFileStat, err := newFile.Stat()
+	if err != nil {
+		return nil, err
+	}
 	gzipNewReader, err := gzip.NewReader(newFile)
 	if err != nil {
 		return nil, err
 	}
 	writer := new(bytes.Buffer)
-	err = bsdiff.Diff(gzipBaseReader, gzipNewReader, writer)
+	err = bsdiffx.Diff(gzipBaseReader, gzipNewReader, newFileStat.Size(), writer)
 	if err != nil {
 		return nil, err
 	}

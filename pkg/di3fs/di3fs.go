@@ -11,8 +11,8 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/icedream/go-bsdiff"
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	log "github.com/sirupsen/logrus"
 )
@@ -94,7 +94,7 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 				baseReader := bytes.NewBuffer(data)
 
 				writer := new(bytes.Buffer)
-				err = bsdiff.Patch(baseReader, writer, patchReader)
+				err = bsdiffx.Patch(baseReader, writer, patchReader)
 				if err != nil {
 					return nil, err
 				}
@@ -155,7 +155,7 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 		baseReader := bytes.NewBuffer(baseData)
 
 		writer := new(bytes.Buffer)
-		err = bsdiff.Patch(baseReader, writer, patchReader)
+		err = bsdiffx.Patch(baseReader, writer, patchReader)
 		if err != nil {
 			log.Errorf("Open failed(bsdiff) err=%v", err)
 			return 0, 0, syscall.EIO

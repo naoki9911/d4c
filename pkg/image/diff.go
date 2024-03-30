@@ -8,7 +8,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/icedream/go-bsdiff"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 )
 
@@ -288,7 +288,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-						err = bsdiff.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), diffWriter)
+						err = bsdiffx.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), int64(len(newBytes)), diffWriter)
 						if err != nil {
 							logger.Errorf("failed to bsdiff.Diff: %v", err)
 							break

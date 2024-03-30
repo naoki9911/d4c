@@ -22,6 +22,8 @@ require (
 	google.golang.org/grpc v1.47.0
 )
 
+replace github.com/icedream/go-bsdiff v1.0.1 => github.com/naoki9911/go-bsdiff v1.0.2
+
 require (
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/Microsoft/hcsshim v0.9.5 // indirect

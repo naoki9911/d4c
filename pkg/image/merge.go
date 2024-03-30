@@ -8,13 +8,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/icedream/go-bsdiff"
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/dsnet/compress/bzip2"
-
-	"github.com/pkg/errors"
 )
 
 type DiffBlock = struct {
@@ -33,54 +29,13 @@ func NewDiffBlock(oldPos, newPos int64) DiffBlock {
 	return res
 }
 
-var ErrInvalidMagic = errors.New("Invalid magic")
-var sizeEncoding = binary.BigEndian
-var magicText = []byte("ENDSLEY/BSDIFF43")
-
-func readHeader(r io.Reader) (size uint64, err error) {
-	magicBuf := make([]byte, len(magicText))
-	n, err := r.Read(magicBuf)
-	if err != nil {
-		return
-	}
-	if n < len(magicText) {
-		err = ErrInvalidMagic
-		return
-	}
-
-	err = binary.Read(r, sizeEncoding, &size)
-
-	return
-}
-
-func writeHeader(w io.Writer, size uint64) error {
-	_, err := w.Write(magicText)
-	if err != nil {
-		return err
-	}
-
-	err = binary.Write(w, sizeEncoding, size)
-	if err != nil {
-		return err
-	}
-
-	return err
-}
-
-func readPatch(reader io.Reader) ([]DiffBlock, uint64, error) {
-	newLen, err := readHeader(reader)
+func readPatch(r io.Reader) ([]DiffBlock, uint64, error) {
+	reader, newLen, err := bsdiffx.ReadPatch(r)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Decompression
-	bz2Reader, err := bzip2.NewReader(reader, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer bz2Reader.Close()
-
-	content, err := io.ReadAll(bz2Reader)
+	content, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -94,26 +49,21 @@ func readPatch(reader io.Reader) ([]DiffBlock, uint64, error) {
 }
 
 func writePatch(w io.Writer, size uint64, blocks []DiffBlock) error {
-	err := writeHeader(w, size)
+	writer, err := bsdiffx.WritePatch(w, size)
 	if err != nil {
 		return err
 	}
-
-	bz2Writer, err := bzip2.NewWriter(w, nil)
-	if err != nil {
-		return err
-	}
-	defer bz2Writer.Close()
+	defer writer.Close()
 
 	for i, b := range blocks {
 		ctrl0 := int64(len(b.addBytes))
-		err = writeInt64(bz2Writer, ctrl0)
+		err = writeInt64(writer, ctrl0)
 		if err != nil {
 			return err
 		}
 
 		ctrl1 := int64(len(b.insertBytes))
-		err = writeInt64(bz2Writer, ctrl1)
+		err = writeInt64(writer, ctrl1)
 		if err != nil {
 			return err
 		}
@@ -122,17 +72,17 @@ func writePatch(w io.Writer, size uint64, blocks []DiffBlock) error {
 		if i != len(blocks)-1 {
 			ctrl2 = blocks[i+1].oldPos - blocks[i].oldPos - ctrl0
 		}
-		err = writeInt64(bz2Writer, ctrl2)
+		err = writeInt64(writer, ctrl2)
 		if err != nil {
 			return err
 		}
 
-		_, err = bz2Writer.Write(b.addBytes)
+		_, err = writer.Write(b.addBytes)
 		if err != nil {
 			return err
 		}
 
-		_, err = bz2Writer.Write(b.insertBytes)
+		_, err = writer.Write(b.insertBytes)
 		if err != nil {
 			return err
 		}
@@ -700,7 +650,7 @@ func MergeDiffDimg(lowerEntry, upperEntry *FileEntry, lowerDiff, upperDiff strin
 							return err
 						}
 						mergeBytes := bytes.NewBuffer(nil)
-						err = bsdiff.Patch(bytes.NewBuffer(baseBuf.Bytes()), mergeBytes, bytes.NewBuffer(upperBytes))
+						err = bsdiffx.Patch(bytes.NewBuffer(baseBuf.Bytes()), mergeBytes, bytes.NewBuffer(upperBytes))
 						if err != nil {
 							return err
 						}
