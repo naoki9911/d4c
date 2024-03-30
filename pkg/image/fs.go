@@ -107,10 +107,12 @@ func (fe FileEntry) IsDir() bool {
 	return fe.Type == FILE_ENTRY_DIR || fe.Type == FILE_ENTRY_DIR_NEW
 }
 
+// IsNew() represents this file entry does not depend on any other images
 func (fe FileEntry) IsNew() bool {
 	return fe.Type == FILE_ENTRY_FILE_NEW ||
+		fe.Type == FILE_ENTRY_DIR_NEW ||
 		fe.Type == FILE_ENTRY_OPAQUE ||
-		fe.Type == FILE_ENTRY_DIR_NEW
+		fe.Type == FILE_ENTRY_SYMLINK
 }
 
 func (fe FileEntry) IsSame() bool {
