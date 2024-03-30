@@ -10,6 +10,7 @@ BIN_FUSE="$ROOT_DIR/fuse-diff"
 TEST_SCRIPT=$1
 IMAGE_DIR=$2
 RUN_NUM=$3
+THREAD_NUM=${4:-1}
 
 source $TEST_SCRIPT
 
@@ -29,7 +30,7 @@ cd $IMAGE_DIR
 for ((i=0; i < ${#IMAGE_VERSIONS[@]}; i++));do
 	IMAGE=${IMAGE_VERSIONS[i]}
 	echo "Creating base image for $IMAGE_NAME:$IMAGE"
-	$BIN_CTR_CLI convert --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --excludes /dev >/dev/null 2>&1
+	$BIN_CTR_CLI convert --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --excludes /dev --threadNum $THREAD_NUM
 	mkdir $IMAGE
 	tar -xf ./image-$IMAGE/layer.tar -C ./$IMAGE
 	rm -rf ./$IMAGE/dev

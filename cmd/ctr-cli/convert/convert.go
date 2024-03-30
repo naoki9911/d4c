@@ -46,6 +46,12 @@ var Flags = []cli.Flag{
 		Usage:    "path to exclude from image",
 		Required: false,
 	},
+	&cli.IntFlag{
+		Name:     "threadNum",
+		Usage:    "The number of threads to process",
+		Value:    1,
+		Required: false,
+	},
 }
 
 var workDir = filepath.Join(os.TempDir(), "ctr-cli")
@@ -100,6 +106,7 @@ func Action(c *cli.Context) error {
 	outputPath := c.String("output")
 	outputDimg := c.Bool("dimg")
 	outputCdimg := c.Bool("cdimg")
+	threadNum := c.Int("threadNum")
 
 	if outputDimg && os.Geteuid() != 0 {
 		return fmt.Errorf("root required")
@@ -238,7 +245,7 @@ func Action(c *cli.Context) error {
 
 	logger.Info("packing dimg")
 	dimgPath := filepath.Join(outputPath, "image.dimg")
-	err = di3fsImage.PackDir(tempDir, dimgPath)
+	err = di3fsImage.PackDir(tempDir, dimgPath, threadNum)
 	if err != nil {
 		return fmt.Errorf("failed to pack dimg: %v", err)
 	}

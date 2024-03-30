@@ -6,6 +6,7 @@ if [ $EUID -ne 0 ]; then
 	exit 1
 fi
 RUN_NUM=1
+THREAD_NUM=${1:-1}
 
 PATH=$PATH:/usr/local/go/bin
 
@@ -22,7 +23,7 @@ TESTS=("apache" "mysql" "nginx" "postgres" "redis")
 for TEST in "${TESTS[@]}"
 do
 	echo "Benchmarking $TEST"
-	./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM
+	./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM
 	cp $IMAGE_DIR/$TEST/benchmark.log ./$RESULT_DIR/$TEST-benchmark.log
 done
 

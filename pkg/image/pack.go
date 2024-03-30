@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 )
@@ -45,7 +46,87 @@ func packFile(srcFilePath string, out io.Writer) (int64, error) {
 	return int64(writtenSize), err
 }
 
-func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) error {
+type packTask struct {
+	entry *FileEntry
+	path  string
+	data  *bytes.Buffer
+}
+
+func packDirImplMultithread(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer, threadNum int) error {
+	compressTasks := make(chan packTask, 1000)
+	writeTasks := make(chan packTask, 1000)
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("started pack enqueu thread")
+		err := enqueuePackTaskToChannel(dirPath, outDirEntry, compressTasks)
+		if err != nil {
+			logger.Errorf("failed to enque: %v", err)
+		}
+		close(compressTasks)
+		logger.Info("finished pack enqueu thread")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("started pack write thread")
+		for {
+			wt, more := <-writeTasks
+			if !more {
+				break
+			}
+			wt.entry.Offset = int64(outBody.Len())
+			_, err := io.Copy(outBody, wt.data)
+			if err != nil {
+				logger.Errorf("failed to copy to outBody: %v", err)
+				return
+			}
+		}
+		logger.Info("finished pack write thread")
+	}()
+
+	compWg := sync.WaitGroup{}
+	for i := 0; i < threadNum; i++ {
+		wg.Add(1)
+		compWg.Add(1)
+		go func(threadId int) {
+			logger.Infof("started pack compress thread idx=%d", threadId)
+			defer wg.Done()
+			defer compWg.Done()
+			for {
+				ct, more := <-compressTasks
+				if !more {
+					break
+				}
+				outBuffer := bytes.Buffer{}
+				writtenSize, err := packFile(ct.path, &outBuffer)
+				if err != nil {
+					logger.Errorf("failed to pack file %s: %v", ct.path, err)
+					break
+				}
+				ct.entry.CompressedSize = writtenSize
+				ct.entry.Type = FILE_ENTRY_FILE_NEW
+				ct.data = &outBuffer
+				writeTasks <- ct
+			}
+			logger.Infof("finished pack compress thread idx=%d", threadId)
+		}(i)
+	}
+
+	go func() {
+		compWg.Wait()
+		close(writeTasks)
+		logger.Infof("all compression tasks finished")
+	}()
+
+	wg.Wait()
+	return nil
+}
+
+func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan chan packTask) error {
 	logger.Debugf("dirPath:%s\n", dirPath)
 	dirEntries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -91,7 +172,7 @@ func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) 
 			}
 			entry.Type = FILE_ENTRY_SYMLINK
 			entry.RealPath = realPath
-			outDirEntry.Childs[fName] = entry
+			parentEntry.Childs[fName] = entry
 			continue
 		}
 
@@ -114,15 +195,12 @@ func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) 
 			return err
 		}
 
-		logger.Debugf("NewFile Name:%v\n", dirFilePath)
-		entry.Offset = int64(len(outBody.Bytes()))
-		writtenSize, err := packFile(dirFilePath, outBody)
-		if err != nil {
-			return err
+		parentEntry.Childs[fName] = entry
+		taskChan <- packTask{
+			entry: entry,
+			path:  dirFilePath,
+			data:  nil,
 		}
-		entry.CompressedSize = writtenSize
-		entry.Type = FILE_ENTRY_FILE_NEW
-		outDirEntry.Childs[fName] = entry
 	}
 
 	opaqueFiles := []string{}
@@ -135,29 +213,29 @@ func packDirImpl(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer) 
 			Name:   childDir.Name(),
 			Childs: map[string]*FileEntry{},
 		}
-		err = packDirImpl(childDirPath, entry, outBody)
+		err = enqueuePackTaskToChannel(childDirPath, entry, taskChan)
 		if err != nil {
 			return err
 		}
-		outDirEntry.Childs[childDir.Name()] = entry
+		parentEntry.Childs[childDir.Name()] = entry
 	}
 	fileInfo, err := os.Stat(dirPath)
 	if err != nil {
 		return err
 	}
-	outDirEntry.Size = int(fileInfo.Size())
-	outDirEntry.Mode = uint32(fileInfo.Mode())
-	err = outDirEntry.SetUGID(dirPath)
+	parentEntry.Size = int(fileInfo.Size())
+	parentEntry.Mode = uint32(fileInfo.Mode())
+	err = parentEntry.SetUGID(dirPath)
 	if err != nil {
 		return err
 	}
 
-	outDirEntry.Type = FILE_ENTRY_DIR_NEW
-	outDirEntry.OaqueFiles = opaqueFiles
+	parentEntry.Type = FILE_ENTRY_DIR_NEW
+	parentEntry.OaqueFiles = opaqueFiles
 	return nil
 }
 
-func PackDir(dirPath, outDimgPath string) error {
+func PackDir(dirPath, outDimgPath string, threadNum int) error {
 	entry := &FileEntry{
 		Name:   "/",
 		Childs: map[string]*FileEntry{},
@@ -169,11 +247,12 @@ func PackDir(dirPath, outDimgPath string) error {
 	defer outDimg.Close()
 
 	outBody := bytes.Buffer{}
-	err = packDirImpl(dirPath, entry, &outBody)
+	err = packDirImplMultithread(dirPath, entry, &outBody, threadNum)
 	if err != nil {
 		return err
 	}
-
+	//jsonBytes, _ := json.MarshalIndent(entry, " ", " ")
+	//fmt.Println(string(jsonBytes))
 	bodyDigest := digest.FromBytes(outBody.Bytes())
 
 	header := DimgHeader{
