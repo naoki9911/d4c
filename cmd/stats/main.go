@@ -68,7 +68,7 @@ func generateFileDiff(baseFilePath, newFilePath string) ([]byte, error) {
 		return nil, err
 	}
 	writer := new(bytes.Buffer)
-	err = bsdiffx.Diff(baseFile, newFile, newFileStat.Size(), writer)
+	err = bsdiffx.Diff(baseFile, newFile, newFileStat.Size(), writer, bsdiffx.CompressionModeBzip2)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func generateFileDiffFromGzip(baseFilePath, newFilePath string) ([]byte, error) 
 		return nil, err
 	}
 	writer := new(bytes.Buffer)
-	err = bsdiffx.Diff(gzipBaseReader, gzipNewReader, newFileStat.Size(), writer)
+	err = bsdiffx.Diff(gzipBaseReader, gzipNewReader, newFileStat.Size(), writer, bsdiffx.CompressionModeBzip2)
 	if err != nil {
 		return nil, err
 	}

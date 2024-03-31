@@ -2,11 +2,13 @@ package diff
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -64,6 +66,12 @@ func DimgCommand() *cli.Command {
 				Value:    "none",
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "compressionMode",
+				Usage:    "Mode to compress diffs",
+				Value:    "bzip2",
+				Required: false,
+			},
 		},
 	}
 
@@ -101,9 +109,15 @@ func dimgAction(c *cli.Context) error {
 
 	start := time.Now()
 
-	dc := image.DiffMultihreadConfig{
-		ThreadNum:    threadNum,
-		ScheduleMode: threadSchedMode,
+	compMode, err := bsdiffx.GetCompressMode(c.String("compressionMode"))
+	if err != nil {
+		return err
+	}
+
+	dc := image.DiffConfig{
+		ThreadNum:       threadNum,
+		ScheduleMode:    threadSchedMode,
+		CompressionMode: compMode,
 	}
 	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc)
 	if err != nil {
@@ -121,6 +135,7 @@ func dimgAction(c *cli.Context) error {
 				"mode:" + mode,
 				"threadNum:" + strconv.Itoa(threadNum),
 				"threadSchedMode:" + threadSchedMode,
+				fmt.Sprintf("compressionMode:%d", compMode),
 			},
 		}
 		err = b.AppendResult(metric)
@@ -179,6 +194,12 @@ func CdimgCommand() *cli.Command {
 				Value:    "none",
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "compressionMode",
+				Usage:    "Mode to compress diffs",
+				Value:    "bzip2",
+				Required: false,
+			},
 		},
 	}
 
@@ -216,9 +237,15 @@ func cdimgAction(c *cli.Context) error {
 
 	start := time.Now()
 
-	dc := image.DiffMultihreadConfig{
-		ThreadNum:    threadNum,
-		ScheduleMode: threadSchedMode,
+	compMode, err := bsdiffx.GetCompressMode(c.String("compressionMode"))
+	if err != nil {
+		return err
+	}
+
+	dc := image.DiffConfig{
+		ThreadNum:       threadNum,
+		ScheduleMode:    threadSchedMode,
+		CompressionMode: compMode,
 	}
 	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary, dc)
 	if err != nil {
@@ -236,6 +263,7 @@ func cdimgAction(c *cli.Context) error {
 				"mode:" + mode,
 				"threadNum:" + strconv.Itoa(threadNum),
 				"threadSchedMode:" + threadSchedMode,
+				fmt.Sprintf("compressionMode:%d", compMode),
 			},
 		}
 		err = b.AppendResult(metric)

@@ -10,6 +10,7 @@ RUN_NUM=1
 TEST=$1
 THREAD_NUM=${2:-1}
 SCHED_MODE=${3,-"none"}
+COMP_MODE=$4
 
 PATH=$PATH:/usr/local/go/bin
 
@@ -23,7 +24,7 @@ IMAGE_DIR=$RESULT_DIR/images
 mkdir -p $IMAGE_DIR
 
 echo "Benchmarking $TEST"
-./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE
+./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE
 cp $IMAGE_DIR/$TEST/benchmark.log ./$RESULT_DIR/$TEST-benchmark.log
 
 ./bench_patch_lxc.sh $TEST $RESULT_DIR

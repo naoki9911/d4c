@@ -12,6 +12,7 @@ IMAGE_DIR=$2
 RUN_NUM=$3
 THREAD_NUM=${4:-1}
 SCHED_MODE=${5:-"none"}
+COMP_MODE=$6
 
 source $TEST_SCRIPT
 
@@ -50,7 +51,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_$DIFF_NAME.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
+		$BIN_CTR_CLI dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_$DIFF_NAME.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 	done
 
 	# packing diff data
@@ -80,7 +81,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME file-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
+		$BIN_CTR_CLI dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 	done
 
 	# packing diff data and test it
@@ -110,14 +111,14 @@ fusermount3 -u /tmp/fuse
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED binary-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_$MERGED.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
+	$BIN_CTR_CLI dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_$MERGED.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 done
 ls -l diff_$MERGED.dimg
 
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED file-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_file_$MERGED.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE
+	$BIN_CTR_CLI dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_file_$MERGED.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 done
 ls -l diff_file_$MERGED.dimg
 

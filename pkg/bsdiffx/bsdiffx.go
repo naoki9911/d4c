@@ -8,6 +8,7 @@ import (
 	"github.com/dsnet/compress/bzip2"
 	"github.com/icedream/go-bsdiff/raw/diff"
 	"github.com/icedream/go-bsdiff/raw/patch"
+	"github.com/klauspost/compress/zstd"
 )
 
 var (
@@ -20,7 +21,19 @@ type CompressionMode = uint8
 
 const (
 	CompressionModeBzip2 = CompressionMode(1)
+	CompressionModeZstd  = CompressionMode(2)
 )
+
+func GetCompressMode(mode string) (CompressionMode, error) {
+	switch mode {
+	case "bzip2":
+		return CompressionModeBzip2, nil
+	case "zstd":
+		return CompressionModeZstd, nil
+	default:
+		return 0, ErrInvalidCompressionMode
+	}
+}
 
 func WriteHeader(w io.Writer, size uint64, mode CompressionMode) (err error) {
 	err = binary.Write(w, sizeEncoding, size)
@@ -38,9 +51,9 @@ func ReadHeader(r io.Reader) (size uint64, mode CompressionMode, err error) {
 	}
 	err = binary.Read(r, sizeEncoding, &mode)
 
-	mode = CompressionModeBzip2
 	switch mode {
 	case CompressionModeBzip2:
+	case CompressionModeZstd:
 	default:
 		err = ErrInvalidCompressionMode
 		return
@@ -49,41 +62,50 @@ func ReadHeader(r io.Reader) (size uint64, mode CompressionMode, err error) {
 	return
 }
 
-func WritePatch(w io.Writer, newLen uint64) (io.WriteCloser, error) {
-	if err := WriteHeader(w, newLen, CompressionModeBzip2); err != nil {
+func WritePatch(w io.Writer, newLen uint64, mode CompressionMode) (io.WriteCloser, error) {
+	err := WriteHeader(w, newLen, mode)
+	if err != nil {
 		return nil, err
 	}
 
 	// Compression
-	bz2Writer, err := bzip2.NewWriter(w, nil)
+	var writer io.WriteCloser
+	switch mode {
+	case CompressionModeBzip2:
+		writer, err = bzip2.NewWriter(w, nil)
+	case CompressionModeZstd:
+		writer, err = zstd.NewWriter(w)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return bz2Writer, nil
+	return writer, nil
 }
 
-func ReadPatch(r io.Reader) (io.ReadCloser, uint64, error) {
+func ReadPatch(r io.Reader) (io.Reader, uint64, CompressionMode, error) {
 	newLen, compMode, err := ReadHeader(r)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	// Decompression
-	var reader io.ReadCloser
+	var reader io.Reader
 	switch compMode {
 	case CompressionModeBzip2:
 		reader, err = bzip2.NewReader(r, nil)
-		if err != nil {
-			return nil, 0, err
-		}
+	case CompressionModeZstd:
+		reader, err = zstd.NewReader(r)
+	}
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	return reader, newLen, nil
+	return reader, newLen, compMode, nil
 }
 
-func Diff(oldReader, newReader io.Reader, newSize int64, patchWriter io.Writer) error {
-	writer, err := WritePatch(patchWriter, uint64(newSize))
+func Diff(oldReader, newReader io.Reader, newSize int64, patchWriter io.Writer, mode CompressionMode) error {
+	writer, err := WritePatch(patchWriter, uint64(newSize), mode)
 	if err != nil {
 		return err
 	}
@@ -93,11 +115,10 @@ func Diff(oldReader, newReader io.Reader, newSize int64, patchWriter io.Writer) 
 }
 
 func Patch(oldReader io.Reader, newWriter io.Writer, patchReader io.Reader) error {
-	reader, newLen, err := ReadPatch(patchReader)
+	reader, newLen, _, err := ReadPatch(patchReader)
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
 
 	return patch.Patch(oldReader, newWriter, reader, newLen)
 }

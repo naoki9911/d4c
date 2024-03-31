@@ -21,7 +21,7 @@ func getFileSize(path string) (int, error) {
 	return int(fileInfo.Size()), nil
 }
 
-func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffMultihreadConfig) error {
+func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffConfig) error {
 	oldDimg, err := OpenDimgFile(oldDimgPath)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	return nil
 }
 
-func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool, dc DiffMultihreadConfig) error {
+func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool, dc DiffConfig) error {
 	oldCdimg, err := OpenCdimgFile(oldCdimgPath)
 	if err != nil {
 		return err
@@ -121,12 +121,13 @@ const (
 	DIFF_MULTI_SCHED_SIZE_ORDERED = "size-ordered"
 )
 
-type DiffMultihreadConfig struct {
-	ThreadNum    int
-	ScheduleMode string
+type DiffConfig struct {
+	ThreadNum       int
+	ScheduleMode    string
+	CompressionMode bsdiffx.CompressionMode
 }
 
-func (dc *DiffMultihreadConfig) Validate() error {
+func (dc *DiffConfig) Validate() error {
 	if dc.ThreadNum <= 0 {
 		return fmt.Errorf("invalid ThreadNum: %d", dc.ThreadNum)
 	}
@@ -134,6 +135,7 @@ func (dc *DiffMultihreadConfig) Validate() error {
 	if dc.ScheduleMode != DIFF_MULTI_SCHED_NONE && dc.ScheduleMode != DIFF_MULTI_SCHED_SIZE_ORDERED {
 		return fmt.Errorf("invalid ScheduleMode: %s", dc.ScheduleMode)
 	}
+
 	return nil
 }
 
@@ -166,7 +168,7 @@ func (dq *diffTaskQueue) Close() {
 	}
 }
 
-func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffMultihreadConfig) error {
+func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffConfig) error {
 	diffTasks := make(chan diffTask, 1000)
 	writeTasks := make(chan diffTask, 1000)
 	wg := sync.WaitGroup{}
@@ -288,7 +290,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-						err = bsdiffx.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), int64(len(newBytes)), diffWriter)
+						err = bsdiffx.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), int64(len(newBytes)), diffWriter, dc.CompressionMode)
 						if err != nil {
 							logger.Errorf("failed to bsdiff.Diff: %v", err)
 							break

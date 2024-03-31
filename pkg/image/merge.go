@@ -29,27 +29,27 @@ func NewDiffBlock(oldPos, newPos int64) DiffBlock {
 	return res
 }
 
-func readPatch(r io.Reader) ([]DiffBlock, uint64, error) {
-	reader, newLen, err := bsdiffx.ReadPatch(r)
+func readPatch(r io.Reader) ([]DiffBlock, uint64, bsdiffx.CompressionMode, error) {
+	reader, newLen, compMode, err := bsdiffx.ReadPatch(r)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	content, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	lowerBlocks, err := readContent(newLen, bytes.NewReader(content))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
-	return lowerBlocks, newLen, nil
+	return lowerBlocks, newLen, compMode, nil
 }
 
-func writePatch(w io.Writer, size uint64, blocks []DiffBlock) error {
-	writer, err := bsdiffx.WritePatch(w, size)
+func writePatch(w io.Writer, size uint64, blocks []DiffBlock, mode bsdiffx.CompressionMode) error {
+	writer, err := bsdiffx.WritePatch(w, size, mode)
 	if err != nil {
 		return err
 	}
@@ -409,69 +409,12 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 	return merged, nil
 }
 
-func DeltaMerging(lowerDiff, upperDiff, mergedDiff, lowerFile, upperFile string) error {
-	//fmt.Println(upperDiff)
-	lowerPatch, err := os.Open(lowerDiff)
-	if err != nil {
-		return err
-	}
-	defer lowerPatch.Close()
-
-	upperPatch, err := os.Open(upperDiff)
-	if err != nil {
-		return err
-	}
-	defer upperPatch.Close()
-
-	mergedPatch, err := os.Create(mergedDiff)
-	if err != nil {
-		return err
-	}
-	defer mergedPatch.Close()
-
-	lowerBlocks, _, err := readPatch(lowerPatch)
-	if err != nil {
-		return err
-	}
-	upperBlocks, newLen, err := readPatch(upperPatch)
-	if err != nil {
-		return err
-	}
-
-	var lowerF *os.File = nil
-	var upperF *os.File = nil
-	if lowerFile != "" {
-		lowerF, err = os.Open(lowerFile)
-		if err != nil {
-			return err
-		}
-	}
-	if upperFile != "" {
-		upperF, err = os.Open(upperFile)
-		if err != nil {
-			return err
-		}
-	}
-
-	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, lowerF, upperF)
-	if err != nil {
-		return err
-	}
-
-	err = writePatch(mergedPatch, newLen, mergedBlocks)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func DeltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
-	lowerBlocks, _, err := readPatch(lowerDiff)
+	lowerBlocks, _, _, err := readPatch(lowerDiff)
 	if err != nil {
 		return err
 	}
-	upperBlocks, newLen, err := readPatch(upperDiff)
+	upperBlocks, newLen, compMode, err := readPatch(upperDiff)
 	if err != nil {
 		return err
 	}
@@ -481,7 +424,7 @@ func DeltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) err
 		return err
 	}
 
-	err = writePatch(mergedDiff, newLen, mergedBlocks)
+	err = writePatch(mergedDiff, newLen, mergedBlocks, compMode)
 	if err != nil {
 		return err
 	}

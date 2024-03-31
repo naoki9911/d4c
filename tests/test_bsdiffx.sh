@@ -14,7 +14,11 @@ BIN_CTR_CLI="$ROOT_DIR/ctr-cli"
 
 echo "THIS IS OLD FILE" > /tmp/old.txt
 echo "THIS IS NEW FILE" > /tmp/new.txt
-$BIN_CTR_CLI util diff --old=/tmp/old.txt --new=/tmp/new.txt --diff=/tmp/diff.diff
+$BIN_CTR_CLI util diff --old=/tmp/old.txt --new=/tmp/new.txt --diff=/tmp/diff.diff --compressionMode bzip2
+$BIN_CTR_CLI util patch --old=/tmp/old.txt --new=/tmp/new-patched.txt --diff=/tmp/diff.diff
+diff /tmp/new.txt /tmp/new-patched.txt
+
+$BIN_CTR_CLI util diff --old=/tmp/old.txt --new=/tmp/new.txt --diff=/tmp/diff.diff --compressionMode zstd
 $BIN_CTR_CLI util patch --old=/tmp/old.txt --new=/tmp/new-patched.txt --diff=/tmp/diff.diff
 diff /tmp/new.txt /tmp/new-patched.txt
 

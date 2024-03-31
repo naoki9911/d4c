@@ -39,11 +39,22 @@ func diffCommand() *cli.Command {
 				Usage:    "diff file path",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "compressionMode",
+				Usage:    "Mode to compress diffs",
+				Value:    "bzip2",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			oldFilePath := c.String("old")
 			newFilePath := c.String("new")
 			diffFilePath := c.String("diff")
+
+			compMode, err := bsdiffx.GetCompressMode(c.String("compressionMode"))
+			if err != nil {
+				return err
+			}
 
 			diffFile, err := os.Create(diffFilePath)
 			if err != nil {
@@ -65,7 +76,7 @@ func diffCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			err = bsdiffx.Diff(oldFile, newFile, newFileStat.Size(), diffFile)
+			err = bsdiffx.Diff(oldFile, newFile, newFileStat.Size(), diffFile, compMode)
 			if err != nil {
 				return err
 			}
