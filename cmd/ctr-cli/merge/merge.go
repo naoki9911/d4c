@@ -3,6 +3,7 @@ package merge
 import (
 	"context"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/containerd/containerd/log"
@@ -43,6 +44,12 @@ func DimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.IntFlag{
+				Name:     "threadNum",
+				Usage:    "The number of threads to process",
+				Value:    1,
+				Required: false,
+			},
 		},
 	}
 
@@ -50,11 +57,11 @@ func DimgCommand() *cli.Command {
 }
 
 func dimgAction(c *cli.Context) error {
-	logger.Logger.SetLevel(logrus.WarnLevel)
 	lowerDimg := c.String("lowerDimg")
 	upperDimg := c.String("upperDimg")
 	outDimg := c.String("outDimg")
 	enableBench := c.Bool("benchmark")
+	threadNum := c.Int("threadNum")
 	logger.WithFields(logrus.Fields{
 		"lowerDimg": lowerDimg,
 		"upperDimg": upperDimg,
@@ -78,19 +85,20 @@ func dimgAction(c *cli.Context) error {
 		panic(err)
 	}
 	defer mergeFile.Close()
-	_, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile)
+	_, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile, threadNum)
 	if err != nil {
 		panic(err)
 	}
 
 	if b != nil {
 		metric := benchmark.Metric{
-			TaskName:     "patch",
+			TaskName:     "merge",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: []string{
 				"lowerDimg:" + lowerDimg,
 				"upperDimg:" + upperDimg,
 				"outDimg:" + outDimg,
+				"threadNum:" + strconv.Itoa(threadNum),
 			},
 		}
 		err = b.AppendResult(metric)
@@ -131,6 +139,12 @@ func CdimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.IntFlag{
+				Name:     "threadNum",
+				Usage:    "The number of threads to process",
+				Value:    1,
+				Required: false,
+			},
 		},
 	}
 
@@ -138,11 +152,11 @@ func CdimgCommand() *cli.Command {
 }
 
 func cdimgAction(c *cli.Context) error {
-	logger.Logger.SetLevel(logrus.WarnLevel)
 	lowerCdimg := c.String("lowerCdimg")
 	upperCdimg := c.String("upperCdimg")
 	outCdimg := c.String("outCdimg")
 	enableBench := c.Bool("benchmark")
+	threadNum := c.Int("threadNum")
 	logger.WithFields(logrus.Fields{
 		"lowerCdimg": lowerCdimg,
 		"upperCdimg": upperCdimg,
@@ -166,19 +180,20 @@ func cdimgAction(c *cli.Context) error {
 		panic(err)
 	}
 	defer mergeFile.Close()
-	err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile)
+	err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile, threadNum)
 	if err != nil {
 		panic(err)
 	}
 
 	if b != nil {
 		metric := benchmark.Metric{
-			TaskName:     "patch",
+			TaskName:     "merge",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: []string{
 				"lowerCdimg:" + lowerCdimg,
 				"upperCdimg:" + upperCdimg,
 				"outCdimg:" + outCdimg,
+				"threadNum:" + strconv.Itoa(threadNum),
 			},
 		}
 		err = b.AppendResult(metric)

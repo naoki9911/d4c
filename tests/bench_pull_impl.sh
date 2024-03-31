@@ -10,6 +10,7 @@ TEST_SCRIPT=$1
 IMAGE_DIR=$2
 RUN_NUM=$3
 SERVER_HOST=$4
+THREAD_NUM=$5
 
 source $TEST_SCRIPT
 
@@ -29,7 +30,7 @@ IMAGE_DIR=$IMAGE_DIR/$IMAGE_NAME
 cd $IMAGE_DIR
 IMAGE_PATH=$(pwd)
 
-systemd-run --unit=d4c-server $BIN_SERVER
+systemd-run --unit=d4c-server $BIN_SERVER --threadNum $THREAD_NUM
 systemd-run --unit=d4c-snapshotter $BIN_SNAPSHOTTER
 systemctl restart containerd
 sleep 2

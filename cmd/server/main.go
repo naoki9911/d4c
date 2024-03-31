@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,11 +28,21 @@ var DiffDatas map[string]*update.DiffData = map[string]*update.DiffData{}
 var DiffDatasLock = sync.Mutex{}
 var tempDiffDir = "/tmp/d4c-server"
 
+type diffServer struct {
+	threadNum int
+}
+
+func NewDiffServer(threadNum int) *diffServer {
+	return &diffServer{
+		threadNum: threadNum,
+	}
+}
+
 func getDiffTag(imageName, baseVersion, v string) string {
 	return fmt.Sprintf("%s_%s-%s", imageName, baseVersion, v)
 }
 
-func handleDeleteDiffData(w http.ResponseWriter, r *http.Request) {
+func (ds *diffServer) handleDeleteDiffData(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "DELETE" {
 		logger.Errorf("invalid method %s", r.Method)
 		w.WriteHeader(http.StatusBadRequest)
@@ -46,7 +57,7 @@ func handleDeleteDiffData(w http.ResponseWriter, r *http.Request) {
 	logger.Info("cleaned DiffDatas")
 }
 
-func handlePostDiffData(w http.ResponseWriter, r *http.Request) {
+func (ds *diffServer) handlePostDiffData(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		logger.Errorf("invalid method %s", r.Method)
 		w.WriteHeader(http.StatusBadRequest)
@@ -104,7 +115,7 @@ func handlePostDiffData(w http.ResponseWriter, r *http.Request) {
 	logger.WithField("diffData", diffData).Info("added DiffDatas")
 }
 
-func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
+func (ds *diffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 	req, err := utils.UnmarshalJsonFromReader[update.UpdateDataRequest](r.Body)
 	if err != nil {
 		logger.Errorf("invalid request err=%v", err)
@@ -227,7 +238,7 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 			upperDiff := DiffDatas[upperTag]
 			logger.WithFields(logrus.Fields{"lower": lowerFileName, "upper": upperDiff.FileName}).Info("merge")
 			diffDataBytes = bytes.Buffer{}
-			diffHeader, err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes)
+			diffHeader, err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes, ds.threadNum)
 			if err != nil {
 				logger.Errorf("failed to merge=%v", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -306,14 +317,17 @@ func handleGetUpdateData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	threadNum := flag.Int("threadNum", 1, "Te number of threads to merge diffs")
+	flag.Parse()
 	os.RemoveAll(tempDiffDir)
 	err := os.Mkdir(tempDiffDir, os.ModePerm)
 	if err != nil {
 		logger.Fatalf("failed to create tempDiffDir %s", tempDiffDir)
 	}
-	http.HandleFunc("/update", handleGetUpdateData)
-	http.HandleFunc("/diffData/add", handlePostDiffData)
-	http.HandleFunc("/diffData/cleanup", handleDeleteDiffData)
+	ds := NewDiffServer(*threadNum)
+	http.HandleFunc("/update", ds.handleGetUpdateData)
+	http.HandleFunc("/diffData/add", ds.handlePostDiffData)
+	http.HandleFunc("/diffData/cleanup", ds.handleDeleteDiffData)
 	logger.Info("started")
 	err = http.ListenAndServe(":8081", nil)
 	if err != nil {

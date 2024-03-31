@@ -72,8 +72,6 @@ func (fe *FileEntry) DeepCopy() *FileEntry {
 		panic(err)
 	}
 
-	res.Childs = map[string]*FileEntry{}
-
 	return &res
 }
 
@@ -121,6 +119,11 @@ func (fe FileEntry) IsSame() bool {
 
 func (fe FileEntry) IsSymlink() bool {
 	return fe.Type == FILE_ENTRY_SYMLINK
+}
+
+func (fe FileEntry) HasBody() bool {
+	return fe.Type == FILE_ENTRY_FILE_NEW ||
+		fe.Type == FILE_ENTRY_FILE_DIFF
 }
 
 func (fe *FileEntry) SetUGID(path string) error {

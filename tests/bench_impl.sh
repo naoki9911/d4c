@@ -96,7 +96,7 @@ MERGED=$IMAGE_LOWER-$IMAGE_UPPER
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark merge $MERGE_LOWER and $MERGE_UPPER to $MERGED ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI dimg merge --lowerDimg=./diff_$MERGE_LOWER.dimg --upperDimg=./diff_$MERGE_UPPER.dimg --outDimg=./diff_merged_$MERGED.dimg --benchmark
+	$BIN_CTR_CLI dimg merge --lowerDimg=./diff_$MERGE_LOWER.dimg --upperDimg=./diff_$MERGE_UPPER.dimg --outDimg=./diff_merged_$MERGED.dimg --benchmark --threadNum $THREAD_NUM
 done
 
 echo "Testing merged $MERGED"
