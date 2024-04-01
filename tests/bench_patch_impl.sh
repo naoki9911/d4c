@@ -14,6 +14,9 @@ BIN_MERGE="$ROOT_DIR/merge"
 TEST_SCRIPT=$1
 IMAGE_DIR=$2
 RUN_NUM=$3
+THREAD_NUM=$4
+SCHED_MODE=$5
+COMP_MODE=$6
 
 source $TEST_SCRIPT
 
@@ -28,6 +31,8 @@ trap err ERR
 IMAGE_DIR=$IMAGE_DIR/$IMAGE_NAME
 cd $IMAGE_DIR
 
+LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME"
+
 for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	LOWER=${IMAGE_VERSIONS[i]}
 	UPPER=${IMAGE_VERSIONS[$(expr $i + 1)]}
@@ -37,7 +42,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark patch $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
+		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
 
@@ -45,7 +50,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_FUSE --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
+		$BIN_FUSE --label $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
 		sleep 5
 		if [ $j -eq 0 ]; then
 			diff -r $UPPER /tmp/fuse --no-dereference

@@ -28,8 +28,7 @@ echo "===== Prepare ====="
 
   sudo apt-get update
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dbus-user-session docker-ce containerd.io golang-go fuse3 python3 python3-pip jq
-  sudo pip3 install docker-squash
-  #pip3 install matplotlib numpy
+  sudo pip3 install docker-squash matplotlib
 
   systemctl --user start dbus
 

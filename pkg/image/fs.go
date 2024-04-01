@@ -24,6 +24,27 @@ const (
 	FILE_ENTRY_OPAQUE
 )
 
+func EntryTypeToString(e EntryType) string {
+	switch e {
+	case FILE_ENTRY_FILE_NEW:
+		return "file_new"
+	case FILE_ENTRY_FILE_SAME:
+		return "file_same"
+	case FILE_ENTRY_FILE_DIFF:
+		return "file_diff"
+	case FILE_ENTRY_DIR:
+		return "dir"
+	case FILE_ENTRY_DIR_NEW:
+		return "dir_new"
+	case FILE_ENTRY_SYMLINK:
+		return "symlink"
+	case FILE_ENTRY_OPAQUE:
+		return "opaque"
+	default:
+		panic(fmt.Errorf("unexpected EntryType: %v", e))
+	}
+}
+
 func UnmarshalJsonFromCompressed[T any](b []byte) (*T, error) {
 	buf := bytes.NewBuffer(b)
 	reader, err := zstd.NewReader(buf)

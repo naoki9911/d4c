@@ -1,20 +1,31 @@
 package benchmark
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 
 type Benchmark struct {
-	logFile *os.File
+	logFile       *os.File
+	writeLock     sync.Mutex
+	defaultLabels map[string]string
 }
 
 type Metric struct {
-	TaskName     string
-	Timestamp    time.Time
-	ElapsedMilli int
-	Labels       []string
+	TaskName     string            `json:"taskName"`
+	Timestamp    time.Time         `json:"timestamp"`
+	ElapsedMilli int               `json:"elapsedMilliseconds"`
+	Size         int64             `json:"size"`
+	Labels       map[string]string `json:"labels"`
+}
+
+func (m *Metric) AddLabels(labels map[string]string) {
+	for k, v := range labels {
+		m.Labels[k] = v
+	}
 }
 
 func NewBenchmark(path string) (*Benchmark, error) {
@@ -23,10 +34,15 @@ func NewBenchmark(path string) (*Benchmark, error) {
 		return nil, err
 	}
 	b := &Benchmark{
-		logFile: file,
+		logFile:   file,
+		writeLock: sync.Mutex{},
 	}
 
 	return b, nil
+}
+
+func (b *Benchmark) SetDefaultLabels(l map[string]string) {
+	b.defaultLabels = l
 }
 
 func (b *Benchmark) Close() error {
@@ -39,17 +55,17 @@ func (b *Benchmark) Close() error {
 }
 
 func (b *Benchmark) AppendResult(m Metric) error {
+	if b.defaultLabels != nil {
+		m.AddLabels(b.defaultLabels)
+	}
 	m.Timestamp = time.Now()
-	col := fmt.Sprintf("%s,%s,%d", m.TaskName, m.Timestamp.Format(time.RFC3339), m.ElapsedMilli)
-	for _, l := range m.Labels {
-		col += fmt.Sprintf(",%s", l)
-	}
-	col += "\n"
-	_, err := b.logFile.Write([]byte(col))
+	bytes, err := json.Marshal(m)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal Metric: %v", err)
 	}
-	err = b.logFile.Sync()
+	b.writeLock.Lock()
+	defer b.writeLock.Unlock()
+	_, err = b.logFile.Write(append(bytes, []byte("\n")...))
 	if err != nil {
 		return err
 	}

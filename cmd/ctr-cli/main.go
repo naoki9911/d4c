@@ -32,7 +32,13 @@ func NewApp() *cli.App {
 	app.Version = "0.0.0"
 	app.Usage = "CLI tool for di3fs-containerd"
 	app.EnableBashCompletion = true
-	app.Flags = []cli.Flag{}
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{
+			Name:     "labels",
+			Usage:    "labels to be added to benchmark result",
+			Required: false,
+		},
+	}
 	app.Commands = []*cli.Command{
 		convert.Command(),
 		dimgCommand(),

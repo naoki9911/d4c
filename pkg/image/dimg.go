@@ -9,13 +9,15 @@ import (
 	"os"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/opencontainers/go-digest"
 )
 
 type DimgHeader struct {
-	Id        digest.Digest `json:"id"` // generated when the full image generated
-	ParentId  digest.Digest `json:"parentID"`
-	FileEntry FileEntry     `json:"fileEntry"`
+	Id              digest.Digest           `json:"id"` // generated when the full image generated
+	ParentId        digest.Digest           `json:"parentID"`
+	CompressionMode bsdiffx.CompressionMode `json:"compressionMode"`
+	FileEntry       FileEntry               `json:"fileEntry"`
 }
 
 func (dh *DimgHeader) Digest() digest.Digest {

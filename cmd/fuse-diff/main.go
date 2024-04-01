@@ -21,6 +21,7 @@ import (
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -64,6 +65,7 @@ func main() {
 	diffDimg := flag.String("diffDimg", "", "path to diff dimg")
 	parentCdimg := flag.String("parentCdimg", "", "path to parent cdimg")
 	diffCdimg := flag.String("diffCdimg", "", "path to diff cdimg")
+	label := flag.String("label", "", "label for benchmark")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Printf("usage: %s MOUNTPOINT\n", path.Base(os.Args[0]))
@@ -180,17 +182,17 @@ func main() {
 		log.Fatalf("Mount fail: %v\n", err)
 	}
 	log.Infof("Mounted!")
-	fmt.Printf("elapsed = %v\n", (time.Since(start).Milliseconds()))
 	if *bench {
 		elapsedMilli := time.Since(start).Milliseconds()
 		metric := benchmark.Metric{
 			TaskName:     "di3fs",
 			ElapsedMilli: int(elapsedMilli),
-			Labels: []string{
-				"parent:" + *parentDimg,
-				"patch:" + *diffDimg,
+			Labels: map[string]string{
+				"parent": *parentDimg,
+				"patch":  *diffDimg,
 			},
 		}
+		metric.AddLabels(utils.ParseLabels([]string{*label}))
 		err = b.AppendResult(metric)
 		if err != nil {
 			panic(err)

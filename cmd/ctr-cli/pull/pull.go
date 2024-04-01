@@ -56,7 +56,7 @@ func Action(c *cli.Context) error {
 		"host":      host,
 	}).Info("starting to pull")
 
-	err := pullImage(host, imageName, benchmark)
+	err := pullImage(c, host, imageName, benchmark)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func Command() *cli.Command {
 	return &cmd
 }
 
-func pullImage(host string, imageNameWithVersion string, bench bool) error {
+func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench bool) error {
 	var b *benchmark.Benchmark = nil
 	var err error
 	if bench {
@@ -204,12 +204,13 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 		metricDownload := benchmark.Metric{
 			TaskName:     "pull-download",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"imageName:" + resJson.Name,
-				"version:" + resJson.Version,
-				"baseVersion:" + resJson.BaseVersion,
+			Labels: map[string]string{
+				"imageName":   resJson.Name,
+				"version":     resJson.Version,
+				"baseVersion": resJson.BaseVersion,
 			},
 		}
+		metricDownload.AddLabels(utils.ParseLabels(c.StringSlice("labels")))
 		err = b.AppendResult(metricDownload)
 		if err != nil {
 			return err
@@ -224,12 +225,13 @@ func pullImage(host string, imageNameWithVersion string, bench bool) error {
 		metricDownload := benchmark.Metric{
 			TaskName:     "pull",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"imageName:" + resJson.Name,
-				"version:" + resJson.Version,
-				"baseVersion:" + resJson.BaseVersion,
+			Labels: map[string]string{
+				"imageName":   resJson.Name,
+				"version":     resJson.Version,
+				"baseVersion": resJson.BaseVersion,
 			},
 		}
+		metricDownload.AddLabels(utils.ParseLabels(c.StringSlice("labels")))
 		err = b.AppendResult(metricDownload)
 		if err != nil {
 			return err

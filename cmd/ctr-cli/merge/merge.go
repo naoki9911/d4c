@@ -8,7 +8,9 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
@@ -44,6 +46,12 @@ func DimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.BoolFlag{
+				Name:     "benchmarkPerFile",
+				Usage:    "enable benchmark for files",
+				Value:    false,
+				Required: false,
+			},
 			&cli.IntFlag{
 				Name:     "threadNum",
 				Usage:    "The number of threads to process",
@@ -61,6 +69,7 @@ func dimgAction(c *cli.Context) error {
 	upperDimg := c.String("upperDimg")
 	outDimg := c.String("outDimg")
 	enableBench := c.Bool("benchmark")
+	enableBenchPerFile := c.Bool("benchmarkPerFile")
 	threadNum := c.Int("threadNum")
 	logger.WithFields(logrus.Fields{
 		"lowerDimg": lowerDimg,
@@ -70,12 +79,13 @@ func dimgAction(c *cli.Context) error {
 
 	var b *benchmark.Benchmark = nil
 	var err error
-	if enableBench {
+	if enableBench || enableBenchPerFile {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
 			return err
 		}
 		defer b.Close()
+		b.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
 	}
 
 	start := time.Now()
@@ -85,7 +95,18 @@ func dimgAction(c *cli.Context) error {
 		panic(err)
 	}
 	defer mergeFile.Close()
-	_, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile, threadNum)
+	mergeConfig := image.MergeConfig{
+		ThreadNum:        threadNum,
+		BenchmarkPerFile: enableBenchPerFile,
+		Benchmarker:      b,
+	}
+	header, err := image.MergeDimg(lowerDimg, upperDimg, mergeFile, mergeConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	elapsed := time.Since(start)
+	stat, err := os.Stat(outDimg)
 	if err != nil {
 		panic(err)
 	}
@@ -93,12 +114,14 @@ func dimgAction(c *cli.Context) error {
 	if b != nil {
 		metric := benchmark.Metric{
 			TaskName:     "merge",
-			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"lowerDimg:" + lowerDimg,
-				"upperDimg:" + upperDimg,
-				"outDimg:" + outDimg,
-				"threadNum:" + strconv.Itoa(threadNum),
+			ElapsedMilli: int(elapsed.Milliseconds()),
+			Size:         stat.Size(),
+			Labels: map[string]string{
+				"lowerDimg":       lowerDimg,
+				"upperDimg":       upperDimg,
+				"outDimg":         outDimg,
+				"threadNum":       strconv.Itoa(threadNum),
+				"compressionMode": bsdiffx.CompressionModeToString(header.CompressionMode),
 			},
 		}
 		err = b.AppendResult(metric)
@@ -139,6 +162,12 @@ func CdimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.BoolFlag{
+				Name:     "benchmarkPerFile",
+				Usage:    "enable benchmark for files",
+				Value:    false,
+				Required: false,
+			},
 			&cli.IntFlag{
 				Name:     "threadNum",
 				Usage:    "The number of threads to process",
@@ -156,6 +185,7 @@ func cdimgAction(c *cli.Context) error {
 	upperCdimg := c.String("upperCdimg")
 	outCdimg := c.String("outCdimg")
 	enableBench := c.Bool("benchmark")
+	enableBenchPerFile := c.Bool("benchmarkPerFile")
 	threadNum := c.Int("threadNum")
 	logger.WithFields(logrus.Fields{
 		"lowerCdimg": lowerCdimg,
@@ -165,12 +195,13 @@ func cdimgAction(c *cli.Context) error {
 
 	var b *benchmark.Benchmark = nil
 	var err error
-	if enableBench {
+	if enableBench || enableBenchPerFile {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
 			return err
 		}
 		defer b.Close()
+		b.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
 	}
 
 	start := time.Now()
@@ -180,7 +211,18 @@ func cdimgAction(c *cli.Context) error {
 		panic(err)
 	}
 	defer mergeFile.Close()
-	err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile, threadNum)
+	mergeConfig := image.MergeConfig{
+		ThreadNum:        threadNum,
+		BenchmarkPerFile: enableBenchPerFile,
+		Benchmarker:      b,
+	}
+	header, err := image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile, mergeConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	elapsed := time.Since(start)
+	stat, err := os.Stat(outCdimg)
 	if err != nil {
 		panic(err)
 	}
@@ -188,12 +230,14 @@ func cdimgAction(c *cli.Context) error {
 	if b != nil {
 		metric := benchmark.Metric{
 			TaskName:     "merge",
-			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"lowerCdimg:" + lowerCdimg,
-				"upperCdimg:" + upperCdimg,
-				"outCdimg:" + outCdimg,
-				"threadNum:" + strconv.Itoa(threadNum),
+			ElapsedMilli: int(elapsed.Milliseconds()),
+			Size:         stat.Size(),
+			Labels: map[string]string{
+				"lowerCdimg":      lowerCdimg,
+				"upperCdimg":      upperCdimg,
+				"outCdimg":        outCdimg,
+				"threadNum":       strconv.Itoa(threadNum),
+				"compressionMode": bsdiffx.CompressionModeToString(header.CompressionMode),
 			},
 		}
 		err = b.AppendResult(metric)

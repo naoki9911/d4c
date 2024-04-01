@@ -11,8 +11,12 @@ IMAGE_DIR=$2
 RUN_NUM=$3
 SERVER_HOST=$4
 THREAD_NUM=$5
+SCHED_MODE=$6
+COMP_MODE=$7
 
 source $TEST_SCRIPT
+
+LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME"
 
 ctr image rm $IMAGE_NAME:$IMAGE_LOWER
 ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
@@ -163,7 +167,7 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
@@ -172,14 +176,14 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_LOWER --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_MIDDLE ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
 done
 
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME:$IMAGE_LOWER
@@ -188,7 +192,7 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_MIDDLE
@@ -197,14 +201,14 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_LOWER --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_MIDDLE ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME-file:$IMAGE_MIDDLE
 done
 
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_LOWER

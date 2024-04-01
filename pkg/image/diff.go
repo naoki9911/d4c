@@ -6,8 +6,11 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
+	"time"
 
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 )
@@ -47,9 +50,10 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	}
 
 	header := DimgHeader{
-		Id:        newDimg.Header().Id,
-		ParentId:  oldDimg.Header().Id,
-		FileEntry: newDimg.header.FileEntry,
+		Id:              newDimg.Header().Id,
+		ParentId:        oldDimg.Header().Id,
+		CompressionMode: dc.CompressionMode,
+		FileEntry:       newDimg.header.FileEntry,
 	}
 
 	err = WriteDimg(diffFile, &header, &diffOut)
@@ -89,9 +93,10 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 
 	diffDimgOut := bytes.Buffer{}
 	header := DimgHeader{
-		Id:        newDimg.Header().Id,
-		ParentId:  oldDimg.Header().Id,
-		FileEntry: newDimg.header.FileEntry,
+		Id:              newDimg.Header().Id,
+		ParentId:        oldDimg.Header().Id,
+		CompressionMode: dc.CompressionMode,
+		FileEntry:       newDimg.header.FileEntry,
 	}
 	err = WriteDimg(&diffDimgOut, &header, &diffOut)
 	if err != nil {
@@ -122,9 +127,11 @@ const (
 )
 
 type DiffConfig struct {
-	ThreadNum       int
-	ScheduleMode    string
-	CompressionMode bsdiffx.CompressionMode
+	ThreadNum        int
+	ScheduleMode     string
+	CompressionMode  bsdiffx.CompressionMode
+	BenchmarkPerFile bool
+	Benchmarker      *benchmark.Benchmark
 }
 
 func (dc *DiffConfig) Validate() error {
@@ -229,6 +236,9 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 	go func() {
 		defer wg.Done()
 		logger.Info("started diff write thread")
+		diffCount := 0
+		newCount := 0
+		sameCount := 0
 		for {
 			wt, more := <-writeTasks
 			if !more {
@@ -239,6 +249,29 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 			if err != nil {
 				logger.Errorf("failed to write to diffBody: %v", err)
 				return
+			}
+			switch wt.newEntry.Type {
+			case FILE_ENTRY_FILE_DIFF:
+				diffCount += 1
+			case FILE_ENTRY_FILE_NEW:
+				newCount += 1
+			case FILE_ENTRY_FILE_SAME:
+				sameCount += 1
+			}
+		}
+
+		if dc.BenchmarkPerFile {
+			metric := benchmark.Metric{
+				TaskName: "diff-per-file-stat",
+				Labels: map[string]string{
+					"diffCount": strconv.Itoa(diffCount),
+					"newCount":  strconv.Itoa(newCount),
+					"sameCount": strconv.Itoa(sameCount),
+				},
+			}
+			err := dc.Benchmarker.AppendResult(metric)
+			if err != nil {
+				panic(err)
 			}
 		}
 		logger.Info("finished diff write thread")
@@ -266,6 +299,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						break
 					}
 				} else {
+					start := time.Now()
 					newCompressedBytes := make([]byte, dt.newEntry.CompressedSize)
 					_, err := newDimgFile.ReadAt(newCompressedBytes, dt.newEntry.Offset)
 					if err != nil {
@@ -314,6 +348,22 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						if err != nil {
 							logger.Errorf("failed to read from newDimgFile at 0x%x: %v", dt.newEntry.Offset, err)
 							break
+						}
+					}
+					elapsed := time.Since(start)
+					if dc.BenchmarkPerFile {
+						metric := benchmark.Metric{
+							TaskName:     "diff-per-file",
+							ElapsedMilli: int(elapsed.Milliseconds()),
+							Size:         int64(dt.newEntry.Size),
+							Labels: map[string]string{
+								"type":           EntryTypeToString(dt.newEntry.Type),
+								"compressedSize": strconv.Itoa(int(dt.newEntry.CompressedSize)),
+							},
+						}
+						err = dc.Benchmarker.AppendResult(metric)
+						if err != nil {
+							panic(err)
 						}
 					}
 				}

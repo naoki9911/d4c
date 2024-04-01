@@ -35,6 +35,17 @@ func GetCompressMode(mode string) (CompressionMode, error) {
 	}
 }
 
+func CompressionModeToString(cm CompressionMode) string {
+	switch cm {
+	case CompressionModeBzip2:
+		return "bzip2"
+	case CompressionModeZstd:
+		return "zstd"
+	default:
+		return ""
+	}
+}
+
 func WriteHeader(w io.Writer, size uint64, mode CompressionMode) (err error) {
 	err = binary.Write(w, sizeEncoding, size)
 	if err != nil {

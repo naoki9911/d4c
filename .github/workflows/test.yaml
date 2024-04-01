@@ -122,17 +122,7 @@ jobs:
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark (${{ matrix.script }})
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_lxc.sh ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }}"
-      - name: get result
-        id: get_result
-        run: |
-          mkdir /tmp/benchmark-results
-          sudo lxc file pull test/home/ubuntu/d4c/tests/benchmark/${{ matrix.script }}-benchmark.log /tmp/benchmark-results/.
-      - uses: actions/upload-artifact@v4
-        if: steps.get_result.conclusion == 'success'
-        with:
-          name: benchmark-${{ matrix.script }}-thread-${{ matrix.thread }}-sched-${{ matrix.sched }}-comp-${{ matrix.comp }}
-          path: /tmp/benchmark-results
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_single.sh benchmark benchmark/images ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }}"
 
   benchmark-cdimg:
     runs-on: ubuntu-22.04
@@ -160,26 +150,11 @@ jobs:
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark (${{ matrix.script }} with ${{ matrix.thread}} threads)
         run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench_cdimg_lxc.sh ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }}"
-      - name: get result
-        id: get_result
-        run: |
-          mkdir /tmp/benchmark-results
-          sudo lxc file pull test/home/ubuntu/d4c/tests/benchmark/${{ matrix.script }}-benchmark.log /tmp/benchmark-results/.
-      - uses: actions/upload-artifact@v4
-        if: steps.get_result.conclusion == 'success'
-        with:
-          name: benchmark-cdimg-${{ matrix.script }}-thread-${{ matrix.thread }}-sched-${{ matrix.sched }}-comp-${{ matrix.comp }}
-          path: /tmp/benchmark-results
 
   benchmark-all:
     runs-on: ubuntu-22.04
     needs: sync
-    timeout-minutes: 40
-    strategy:
-      matrix:
-        thread: ["1", "4"]
-        sched: ["none", "size-ordered"]
-        comp: ["bzip2", "zstd"]
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - name: setup lxd
@@ -311,4 +286,19 @@ jobs:
       - name: run test
         run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/test_bsdiffx.sh"
       - name: run benchmark
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench.sh ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }}"
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/bench.sh"
+      - name: get result
+        id: get_result
+        run: |
+          mkdir /tmp/benchmark-results
+          sudo lxc file pull test/tmp/benchmark/benchmark.log /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/diff.png /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/pull.png /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/merge.png /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/patch.png /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/file_diff.png /tmp/benchmark-results/.
+      - uses: actions/upload-artifact@v4
+        if: steps.get_result.conclusion == 'success'
+        with:
+          name: benchmark
+          path: /tmp/benchmark-results

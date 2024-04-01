@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -120,4 +121,20 @@ func randSequence(n int) string {
 
 func GetRandomId(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, randSequence(10))
+}
+
+func ParseLabels(labels []string) map[string]string {
+	res := map[string]string{}
+
+	for _, label := range labels {
+		for _, sl := range strings.Split(label, ",") {
+			l := strings.SplitN(sl, ":", 2)
+			if len(l) == 1 {
+				res[l[0]] = ""
+			} else {
+				res[l[0]] = l[1]
+			}
+		}
+	}
+	return res
 }

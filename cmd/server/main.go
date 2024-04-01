@@ -29,12 +29,14 @@ var DiffDatasLock = sync.Mutex{}
 var tempDiffDir = "/tmp/d4c-server"
 
 type diffServer struct {
-	threadNum int
+	mergeConfig image.MergeConfig
 }
 
 func NewDiffServer(threadNum int) *diffServer {
 	return &diffServer{
-		threadNum: threadNum,
+		mergeConfig: image.MergeConfig{
+			ThreadNum: threadNum,
+		},
 	}
 }
 
@@ -238,7 +240,7 @@ func (ds *diffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 			upperDiff := DiffDatas[upperTag]
 			logger.WithFields(logrus.Fields{"lower": lowerFileName, "upper": upperDiff.FileName}).Info("merge")
 			diffDataBytes = bytes.Buffer{}
-			diffHeader, err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes, ds.threadNum)
+			diffHeader, err = image.MergeDimg(lowerFileName, upperDiff.FileName, &diffDataBytes, ds.mergeConfig)
 			if err != nil {
 				logger.Errorf("failed to merge=%v", err)
 				w.WriteHeader(http.StatusInternalServerError)

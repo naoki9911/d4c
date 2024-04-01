@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	log "github.com/sirupsen/logrus"
 )
@@ -440,7 +443,7 @@ type mergeTask struct {
 	data       []byte
 }
 
-func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *bytes.Buffer, threadNum int) (*FileEntry, error) {
+func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *bytes.Buffer, mc MergeConfig) (*FileEntry, error) {
 	lowerEntry := &lowerImgFile.Header().FileEntry
 	upperEntry := &upperImgFile.Header().FileEntry
 
@@ -481,7 +484,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 	}()
 
 	mergeWg := sync.WaitGroup{}
-	for i := 0; i < threadNum; i++ {
+	for i := 0; i < mc.ThreadNum; i++ {
 		wg.Add(1)
 		mergeWg.Add(1)
 		go func(threadId int) {
@@ -493,6 +496,8 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 				if !more {
 					break
 				}
+				start := time.Now()
+				mode := ""
 				if mt.lowerEntry != nil && mt.upperEntry != nil {
 					if mt.lowerEntry.Type == FILE_ENTRY_FILE_NEW && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
 						lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
@@ -529,6 +534,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 						mt.upperEntry.Type = FILE_ENTRY_FILE_NEW
 						mt.upperEntry.CompressedSize = int64(len(mergeCompressed))
 						mt.data = mergeCompressed
+						mode = "apply"
 					} else if mt.lowerEntry.Type == FILE_ENTRY_FILE_DIFF && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
 						lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
 						upperBytes := make([]byte, mt.upperEntry.CompressedSize)
@@ -550,6 +556,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 						}
 						mt.upperEntry.CompressedSize = int64(mergeBytes.Len())
 						mt.data = mergeBytes.Bytes()
+						mode = "merge"
 					} else {
 						logger.Errorf("unexpected types lower=%v upper=%v", mt.lowerEntry.Type, mt.upperEntry.Type)
 						return
@@ -563,6 +570,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 					}
 					mt.upperEntry = mt.lowerEntry
 					mt.data = lowerBytes
+					mode = "copy-lower"
 				} else if mt.upperEntry != nil {
 					upperBytes := make([]byte, mt.upperEntry.CompressedSize)
 					_, err := upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
@@ -571,6 +579,23 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 						return
 					}
 					mt.data = upperBytes
+					mode = "copy-upper"
+				}
+				elapsed := time.Since(start)
+				if mc.BenchmarkPerFile {
+					metric := benchmark.Metric{
+						TaskName:     "merge-per-file",
+						ElapsedMilli: int(elapsed.Milliseconds()),
+						Size:         int64(mt.upperEntry.Size),
+						Labels: map[string]string{
+							"mergeMode":      mode,
+							"compressedSize": strconv.Itoa(int(mt.upperEntry.CompressedSize)),
+						},
+					}
+					err := mc.Benchmarker.AppendResult(metric)
+					if err != nil {
+						panic(err)
+					}
 				}
 				writeTasks <- mt
 			}
@@ -663,7 +688,13 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 	return nil
 }
 
-func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, threadNum int) (*DimgHeader, error) {
+type MergeConfig struct {
+	ThreadNum        int
+	BenchmarkPerFile bool
+	Benchmarker      *benchmark.Benchmark
+}
+
+func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, mc MergeConfig) (*DimgHeader, error) {
 	lowerImgFile, err := OpenDimgFile(lowerDimg)
 	if err != nil {
 		panic(err)
@@ -675,15 +706,16 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, threadNum int) (*D
 	}
 	defer upperImgFile.Close()
 	tmp := bytes.Buffer{}
-	mergedEntry, err := mergeDiffDimgMultihread(lowerImgFile, upperImgFile, &tmp, threadNum)
+	mergedEntry, err := mergeDiffDimgMultihread(lowerImgFile, upperImgFile, &tmp, mc)
 	if err != nil {
 		panic(err)
 	}
 
 	header := DimgHeader{
-		Id:        upperImgFile.Header().Id,
-		ParentId:  lowerImgFile.Header().ParentId,
-		FileEntry: *mergedEntry,
+		Id:              upperImgFile.Header().Id,
+		ParentId:        lowerImgFile.Header().ParentId,
+		CompressionMode: lowerImgFile.Header().CompressionMode,
+		FileEntry:       *mergedEntry,
 	}
 
 	err = WriteDimg(merged, &header, &tmp)
@@ -693,7 +725,7 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, threadNum int) (*D
 	return &header, nil
 }
 
-func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, threadNum int) error {
+func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, mc MergeConfig) (*DimgHeader, error) {
 	lowerCdimgFile, err := OpenCdimgFile(lowerCdimg)
 	if err != nil {
 		panic(err)
@@ -709,30 +741,31 @@ func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, threadNum int) 
 	upperDimg := upperCdimgFile.Dimg
 
 	tmp := bytes.Buffer{}
-	mergedEntry, err := mergeDiffDimgMultihread(lowerDimg, upperDimg, &tmp, threadNum)
+	mergedEntry, err := mergeDiffDimgMultihread(lowerDimg, upperDimg, &tmp, mc)
 	if err != nil {
 		panic(err)
 	}
 
 	header := DimgHeader{
-		Id:        upperDimg.Header().Id,
-		ParentId:  lowerDimg.Header().ParentId,
-		FileEntry: *mergedEntry,
+		Id:              upperDimg.Header().Id,
+		ParentId:        lowerDimg.Header().ParentId,
+		CompressionMode: upperDimg.Header().CompressionMode,
+		FileEntry:       *mergedEntry,
 	}
 
 	mergedDimg := bytes.Buffer{}
 	err = WriteDimg(&mergedDimg, &header, &tmp)
 	if err != nil {
-		return fmt.Errorf("failed to write to dimg: %v", err)
+		return nil, fmt.Errorf("failed to write to dimg: %v", err)
 	}
 
 	err = WriteCdimgHeader(bytes.NewBuffer(upperCdimgFile.Header.ConfigBytes), &header, int64(mergedDimg.Len()), merged)
 	if err != nil {
-		return fmt.Errorf("failed to cdimg header: %v", err)
+		return nil, fmt.Errorf("failed to cdimg header: %v", err)
 	}
 	_, err = io.Copy(merged, &mergedDimg)
 	if err != nil {
-		return fmt.Errorf("failed to write dimg: %v", err)
+		return nil, fmt.Errorf("failed to write dimg: %v", err)
 	}
-	return nil
+	return &header, nil
 }

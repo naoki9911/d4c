@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
@@ -89,12 +90,13 @@ func dimgAction(c *cli.Context) error {
 		metric := benchmark.Metric{
 			TaskName:     "patch",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"baseDir:" + baseDir,
-				"outDir:" + outDir,
-				"diffDimg:" + diffDimg,
+			Labels: map[string]string{
+				"baseDir":  baseDir,
+				"outDir":   outDir,
+				"diffDimg": diffDimg,
 			},
 		}
+		metric.AddLabels(utils.ParseLabels(c.StringSlice("labels")))
 		err = b.AppendResult(metric)
 		if err != nil {
 			panic(err)
@@ -180,12 +182,13 @@ func cdimgAction(c *cli.Context) error {
 		metric := benchmark.Metric{
 			TaskName:     "patch",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
-			Labels: []string{
-				"baseDir:" + baseDir,
-				"outDir:" + outDir,
-				"diffCdimg:" + diffCdimg,
+			Labels: map[string]string{
+				"baseDir":   baseDir,
+				"outDir":    outDir,
+				"diffCdimg": diffCdimg,
 			},
 		}
+		metric.AddLabels(utils.ParseLabels(c.StringSlice("labels")))
 		err = b.AppendResult(metric)
 		if err != nil {
 			panic(err)
