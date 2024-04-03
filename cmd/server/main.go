@@ -110,7 +110,7 @@ func (ds *diffServer) handlePostDiffData(w http.ResponseWriter, r *http.Request)
 		}
 		baseVersion = baseVer.String()
 	}
-	DiffDataGraphs[diffData.ImageName].Add(baseVersion, v.String(), 1)
+	DiffDataGraphs[diffData.ImageName].Add(baseVersion, v.String(), fmt.Sprintf("%s-%s", baseVersion, v.String()), 1)
 	DiffDatas[getDiffTag(diffData.ImageName, baseVersion, v.String())] = diffData
 	logger.WithFields(logrus.Fields{"baseVersion": baseVersion, "version": v.String(), "Name": diffData.ImageName}).Infof("added diffData to dependency graph")
 
@@ -179,7 +179,7 @@ func (ds *diffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 	}
 
 	logger.WithFields(logrus.Fields{"baseVersion": baseVersion, "version": targetVersion.String(), "Name": req.RequestImage.Name}).Infof("start to find best diffs")
-	path, err := graph.ShortestPath(baseVersion, targetVersion.String())
+	path, _, err := graph.ShortestPath(baseVersion, targetVersion.String())
 	if err != nil {
 		logger.Errorf("DiffDatas commbination for %s not found (base=%s target=%s)", req.RequestImage.Name, baseVersion, targetVersion.String())
 		w.WriteHeader(http.StatusNotFound)

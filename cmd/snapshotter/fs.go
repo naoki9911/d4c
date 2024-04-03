@@ -69,10 +69,11 @@ func (f *Di3FSManager) Mount(ctx context.Context, mountpoint string, labels map[
 		return errdefs.ErrNotFound
 	}
 
-	dimgPaths, err := f.dimgStore.GetDimgPaths(digest.Digest(d))
+	dimgPaths, err := f.dimgStore.GetDimgPathsWithDimgDigest(digest.Digest(d))
 	if err != nil {
 		return fmt.Errorf("failed to get dimg paths for %s: %v", d, err)
 	}
+	log.G(ctx).Infof("dimg paths: %v", dimgPaths)
 
 	err = f.mountDImg(ctx, mountpoint, dimgPaths)
 	if err != nil {

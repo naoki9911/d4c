@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
+	"github.com/naoki9911/fuse-diff-containerd/pkg/algorithm"
 	"github.com/opencontainers/go-digest"
 )
 
@@ -15,7 +17,8 @@ type DimgEntry struct {
 
 type DimgStore struct {
 	storeDir    string
-	dimgIds     map[digest.Digest]*DimgEntry
+	storeLock   sync.Mutex
+	dimgGraph   *algorithm.DirectedGraph
 	dimgDigests map[digest.Digest]*DimgEntry
 }
 
@@ -27,7 +30,8 @@ func NewDimgStore(storeDir string) (*DimgStore, error) {
 
 	s := &DimgStore{
 		storeDir:    storeDir,
-		dimgIds:     map[digest.Digest]*DimgEntry{},
+		storeLock:   sync.Mutex{},
+		dimgGraph:   algorithm.NewDirectedGraph(),
 		dimgDigests: map[digest.Digest]*DimgEntry{},
 	}
 
@@ -41,12 +45,15 @@ func NewDimgStore(storeDir string) (*DimgStore, error) {
 }
 
 func (ds *DimgStore) Walk() error {
+	ds.storeLock.Lock()
+	defer ds.storeLock.Unlock()
+
 	dirs, err := os.ReadDir(ds.storeDir)
 	if err != nil {
 		return fmt.Errorf("failed to ReadDir %s: %v", ds.storeDir, err)
 	}
 
-	ds.dimgIds = map[digest.Digest]*DimgEntry{}
+	ds.dimgGraph = algorithm.NewDirectedGraph()
 	ds.dimgDigests = map[digest.Digest]*DimgEntry{}
 
 	for _, dir := range dirs {
@@ -67,7 +74,7 @@ func (ds *DimgStore) Walk() error {
 			DimgHeader: *header,
 			Path:       fPath,
 		}
-		ds.dimgIds[header.Id] = entry
+		ds.dimgGraph.Add(string(header.ParentId), header.Id.String(), string(header.Digest()), 1)
 		ds.dimgDigests[header.Digest()] = entry
 	}
 
@@ -75,6 +82,9 @@ func (ds *DimgStore) Walk() error {
 }
 
 func (ds *DimgStore) AddDimg(dimgPath string) error {
+	ds.storeLock.Lock()
+	defer ds.storeLock.Unlock()
+
 	dimgFile, err := OpenDimgFile(dimgPath)
 	if err != nil {
 		return fmt.Errorf("failed to open dimg %s: %v", dimgPath, err)
@@ -91,7 +101,7 @@ func (ds *DimgStore) AddDimg(dimgPath string) error {
 		DimgHeader: *header,
 		Path:       fPath,
 	}
-	ds.dimgIds[header.Id] = entry
+	ds.dimgGraph.Add(header.ParentId.String(), header.Id.String(), header.Digest().String(), 1)
 	ds.dimgDigests[header.Digest()] = entry
 
 	return nil
@@ -99,21 +109,29 @@ func (ds *DimgStore) AddDimg(dimgPath string) error {
 
 // string[0] == top
 // string[1] == layer(parentId top.Id)
-func (ds *DimgStore) GetDimgPaths(dimgDigest digest.Digest) ([]string, error) {
+func (ds *DimgStore) GetDimgPathsWithDimgDigest(dimgDigest digest.Digest) ([]string, error) {
+	ds.storeLock.Lock()
+	defer ds.storeLock.Unlock()
+
 	targetDimg, ok := ds.dimgDigests[dimgDigest]
 	if !ok {
 		return nil, fmt.Errorf("dimg for %s not found", dimgDigest)
 	}
 
-	paths := []string{targetDimg.Path}
-	nextId := targetDimg.ParentId
-	for nextId != "" {
-		dimg, ok := ds.dimgIds[nextId]
+	_, dimgs, err := ds.dimgGraph.ShortestPath("", targetDimg.Id.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shortest path for %s: %v", targetDimg.Id, err)
+	}
+
+	paths := make([]string, len(dimgs))
+	for i, dimgEdge := range dimgs {
+		dimg, ok := ds.dimgDigests[digest.Digest(dimgEdge.GetName())]
 		if !ok {
-			return nil, fmt.Errorf("dimg for %s not found", dimgDigest)
+			return nil, fmt.Errorf("dimg for %s not found", dimgEdge.GetName())
 		}
-		paths = append(paths, dimg.Path)
-		nextId = dimg.ParentId
+		// dimgs are ordered from base to top
+		// we need to reverse the path
+		paths[len(dimgs)-i-1] = dimg.Path
 	}
 
 	return paths, nil

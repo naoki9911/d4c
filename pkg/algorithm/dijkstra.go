@@ -15,10 +15,11 @@ type Node struct {
 	done  bool    // 処理済みかを表すフラグ
 	cost  int     // このノードにたどり着くのに必要だったコスト
 	prev  *Node   // このノードにたどりつくのに使われたノード
+	via   *Edge   // the edge used to reach this node
 }
 
 func NewNode(name string) *Node {
-	node := &Node{name, []*Edge{}, false, -1, nil}
+	node := &Node{name, []*Edge{}, false, -1, nil, nil}
 	return node
 }
 
@@ -33,13 +34,18 @@ func (n *Node) GetName() string {
 
 // エッジ
 type Edge struct {
+	name string
 	next *Node // 次に移動できるノード
 	cost int   // 移動にかかるコスト
 }
 
-func NewEdge(next *Node, cost int) *Edge {
-	edge := &Edge{next, cost}
+func NewEdge(name string, next *Node, cost int) *Edge {
+	edge := &Edge{name, next, cost}
 	return edge
+}
+
+func (e *Edge) GetName() string {
+	return e.name
 }
 
 // 有向グラフ
@@ -58,8 +64,8 @@ func (self *DirectedGraph) Print() {
 	}
 }
 
-// グラフの要素を追加する (接続元ノード名、接続先ノード名、移動にかかるコスト)
-func (self *DirectedGraph) Add(src, dst string, cost int) {
+// グラフの要素を追加する (接続元ノード名、接続先ノード名、Edge Name, 移動にかかるコスト)
+func (self *DirectedGraph) Add(src, dst, edgeName string, cost int) {
 	// ノードが既にある場合は追加しない
 	srcNode, ok := self.nodes[src]
 	if !ok {
@@ -74,12 +80,12 @@ func (self *DirectedGraph) Add(src, dst string, cost int) {
 	}
 
 	// ノードをエッジでつなぐ
-	edge := NewEdge(dstNode, cost)
+	edge := NewEdge(edgeName, dstNode, cost)
 	srcNode.AddEdge(edge)
 }
 
 // スタートとゴールを指定して最短経路を求める
-func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node, err error) {
+func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node, via []*Edge, err error) {
 	// 名前からスタート地点のノードを取得する
 	startNode := self.nodes[start]
 
@@ -92,7 +98,7 @@ func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node,
 
 		// 次に処理するノードが見つからなければ終了
 		if err != nil {
-			return nil, errors.New("Goal not found")
+			return nil, nil, errors.New("Goal not found")
 		}
 
 		// ゴールまで到達した
@@ -107,11 +113,13 @@ func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node,
 	// ゴールから逆順にスタートまでノードをたどっていく
 	n := self.nodes[goal]
 	ret_rev := make([]*Node, 0)
+	viaEdgesRev := make([]*Edge, 0)
 	for {
 		ret_rev = append(ret_rev, n)
 		if n.name == start {
 			break
 		}
+		viaEdgesRev = append(viaEdgesRev, n.via)
 		n = n.prev
 	}
 
@@ -119,20 +127,25 @@ func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node,
 		ret = append(ret, ret_rev[len(ret_rev)-i-1])
 	}
 
+	for i := range viaEdgesRev {
+		via = append(via, viaEdgesRev[len(viaEdgesRev)-i-1])
+	}
+
 	// Reset all nodes
 	for i := range self.nodes {
 		self.nodes[i].done = false
 		self.nodes[i].cost = -1
 		self.nodes[i].prev = nil
+		self.nodes[i].via = nil
 	}
 
-	return ret, nil
+	return ret, via, nil
 }
 
 // つながっているノードのコストを計算する
 func (self *DirectedGraph) calc(node *Node) {
 	// ノードにつながっているエッジを取得する
-	for _, edge := range node.edges {
+	for i, edge := range node.edges {
 		nextNode := edge.next
 
 		// 既に処理済みのノードならスキップする
@@ -146,6 +159,7 @@ func (self *DirectedGraph) calc(node *Node) {
 			// 既に見つかっている経路よりもコストが小さければ処理中のノードを遷移元として記録する
 			nextNode.cost = cost
 			nextNode.prev = node
+			nextNode.via = node.edges[i]
 		}
 	}
 
