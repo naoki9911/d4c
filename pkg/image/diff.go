@@ -209,8 +209,17 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 			logger.Infof("task was ordered in size")
 		}
 
-		for i := range diffTaskQueue.taskArray {
-			diffTasks <- diffTaskQueue.taskArray[i]
+		for i, t := range diffTaskQueue.taskArray {
+			// files to generate diffs first
+			if t.oldEntry != nil {
+				diffTasks <- diffTaskQueue.taskArray[i]
+			}
+		}
+
+		for i, t := range diffTaskQueue.taskArray {
+			if t.oldEntry == nil {
+				diffTasks <- diffTaskQueue.taskArray[i]
+			}
 		}
 		close(diffTasks)
 		logger.Info("all task was sent to diff channel")
