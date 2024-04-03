@@ -27,7 +27,7 @@ echo "===== Prepare ====="
   sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 
   sudo apt-get update
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dbus-user-session docker-ce containerd.io golang-go fuse3 python3 python3-pip jq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dbus-user-session docker-ce containerd.io fuse3 python3 python3-pip jq
   sudo pip3 install docker-squash matplotlib
 
   systemctl --user start dbus

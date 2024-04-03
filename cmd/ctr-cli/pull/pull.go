@@ -17,9 +17,11 @@ import (
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/load"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/server"
 	sns "github.com/naoki9911/fuse-diff-containerd/pkg/snapshotter"
-	"github.com/naoki9911/fuse-diff-containerd/pkg/update"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
+	"github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
@@ -42,6 +44,12 @@ var (
 			Name:     "host",
 			Usage:    "server host",
 			Required: true,
+		},
+		&cli.IntFlag{
+			Name:     "expectedDimgsNum",
+			Usage:    "Expected selected dimgs num",
+			Value:    0,
+			Required: false,
 		},
 	}
 )
@@ -79,6 +87,7 @@ func Command() *cli.Command {
 }
 
 func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench bool) error {
+	expectedDimgsNum := c.Int("expectedDimgsNum")
 	var b *benchmark.Benchmark = nil
 	var err error
 	if bench {
@@ -107,7 +116,9 @@ func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench b
 		return err
 	}
 
-	localImages := make([]update.Image, 0)
+	contentStore := snClient.CtrClient.ContentStore()
+
+	localDimgs := make([]digest.Digest, 0)
 	for _, img := range images {
 		targetSns, ok := img.Labels[sns.TargetSnapshotLabel]
 		if !ok {
@@ -116,29 +127,37 @@ func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench b
 		if targetSns != "di3fs" {
 			continue
 		}
-		localImgName := img.Labels[sns.SnapshotLabelImageName]
-		localImgVersion := img.Labels[sns.SnapshotLabelImageVersion]
+		manReader, err := contentStore.ReaderAt(context.TODO(), img.Target)
+		if err != nil {
+			logger.Errorf("failed to reade target %s from content store: %v", img.Target.Digest, err)
+			continue
+		}
+		defer manReader.Close()
 
-		// if the requested image exists local, nothing to do.
-		if localImgName == reqImgName && localImgVersion == reqImgVersion {
-			logger.Infof("%s is already pulled", imageNameWithVersion)
-			return nil
+		manifestBytes := make([]byte, manReader.Size())
+		_, err = manReader.ReadAt(manifestBytes, 0)
+		if err != nil {
+			logger.Errorf("failed to ReadAll from manifest reader: %v", err)
+			continue
 		}
 
-		localImg := update.Image{
-			Name:    localImgName,
-			Version: localImgVersion,
+		manifest := v1.Manifest{}
+		err = json.Unmarshal(manifestBytes, &manifest)
+		if err != nil {
+			logger.Errorf("failed to unmarshal manifest: %v", err)
+			continue
 		}
-		localImages = append(localImages, localImg)
+
+		localDimgs = append(localDimgs, manifest.Layers[0].Digest)
 	}
-	logger.WithField("localImages", localImages).Debug("local images collected")
+	logger.WithField("localDimgs", localDimgs).Debug("local images collected")
 
-	reqBody := update.UpdateDataRequest{
-		RequestImage: update.Image{
+	reqBody := server.UpdateDataRequest{
+		RequestImage: server.ImageTag{
 			Name:    reqImgName,
 			Version: reqImgVersion,
 		},
-		LocalImages: localImages,
+		LocalDimgs: localDimgs,
 	}
 
 	reqBodyBytes, err := json.Marshal(reqBody)
@@ -173,12 +192,16 @@ func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench b
 	if resJsonLength != int(readSize) {
 		return fmt.Errorf("invalid length response expected=%d actual=%d", resJsonLength, readSize)
 	}
-	var resJson update.UpdateDataResponse
+	var resJson server.UpdateDataResponse
 	err = json.Unmarshal(resJsonBytes, &resJson)
 	if err != nil {
 		return err
 	}
-	logger.Infof("recieved response imageName=%s Version=%s baseVersion=%s", resJson.Name, resJson.Version, resJson.BaseVersion)
+	logger.Infof("recieved response imageName=%s Version=%s", resJson.Name, resJson.Version)
+
+	if expectedDimgsNum != 0 && expectedDimgsNum != len(resJson.SourceDimgs) {
+		return fmt.Errorf("unexpected source dimgs num: expected=%d actual=%d", expectedDimgsNum, len(resJson.SourceDimgs))
+	}
 
 	header, _, err := image.LoadCdimgHeader(resp.Body)
 	if err != nil {
@@ -205,9 +228,8 @@ func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench b
 			TaskName:     "pull-download",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: map[string]string{
-				"imageName":   resJson.Name,
-				"version":     resJson.Version,
-				"baseVersion": resJson.BaseVersion,
+				"imageName": resJson.Name,
+				"version":   resJson.Version,
 			},
 		}
 		metricDownload.AddLabels(utils.ParseLabels(c.StringSlice("labels")))
@@ -226,9 +248,8 @@ func pullImage(c *cli.Context, host string, imageNameWithVersion string, bench b
 			TaskName:     "pull",
 			ElapsedMilli: int(time.Since(start).Milliseconds()),
 			Labels: map[string]string{
-				"imageName":   resJson.Name,
-				"version":     resJson.Version,
-				"baseVersion": resJson.BaseVersion,
+				"imageName": resJson.Name,
+				"version":   resJson.Version,
 			},
 		}
 		metricDownload.AddLabels(utils.ParseLabels(c.StringSlice("labels")))

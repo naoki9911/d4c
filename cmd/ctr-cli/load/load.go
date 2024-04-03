@@ -3,6 +3,7 @@ package load
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,6 +73,12 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 	log.G(ctx).Debug("load config done")
 
+	manifest := v1.Manifest{}
+	err = json.Unmarshal(imageHeader.ManifestBytes, &manifest)
+	if err != nil {
+		return err
+	}
+
 	// register image
 	is := snClient.CtrClient.ImageService()
 	_, err = is.Create(ctx, images.Image{
@@ -94,7 +101,7 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 
 	// now ready to create snapshot
-	err = sns.CreateSnapshot(ctx, snClient.SnClient, &imageHeader.Head.ManifestDigest, &imageHeader.DimgDigest, imageName+":"+imageVersion, dimgPath)
+	err = sns.CreateSnapshot(ctx, snClient.SnClient, imageHeader.Head.ManifestDigest, manifest.Layers[0].Digest, imageName+":"+imageVersion, dimgPath)
 	if err != nil {
 		return err
 	}

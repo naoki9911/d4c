@@ -14,11 +14,6 @@ var logger = log.G(context.TODO())
 var (
 	Flags = []cli.Flag{
 		&cli.StringFlag{
-			Name:     "manifest",
-			Usage:    "path to manifest file",
-			Required: true,
-		},
-		&cli.StringFlag{
 			Name:     "config",
 			Usage:    "path to config file",
 			Required: true,
@@ -30,7 +25,7 @@ var (
 		},
 		&cli.StringFlag{
 			Name:     "out",
-			Usage:    "output file name",
+			Usage:    "output cdimg name",
 			Required: true,
 		},
 	}
@@ -38,15 +33,13 @@ var (
 
 func Action(c *cli.Context) error {
 	logger.Logger.SetLevel(logrus.DebugLevel)
-	manifestPath := c.String("manifest")
 	configPath := c.String("config")
 	dimgPath := c.String("dimg")
 	outPath := c.String("out")
 	logger.WithFields(logrus.Fields{
-		"manifestPath": manifestPath,
-		"configPath":   configPath,
-		"dimg":         dimgPath,
-		"outPath":      outPath,
+		"configPath": configPath,
+		"dimg":       dimgPath,
+		"outPath":    outPath,
 	}).Info("starting to pack")
 
 	err := image.PackCdimg(configPath, dimgPath, outPath)

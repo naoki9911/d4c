@@ -6,6 +6,7 @@ package algorithm
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // ノード
@@ -86,12 +87,18 @@ func (self *DirectedGraph) Add(src, dst, edgeName string, cost int) {
 
 // スタートとゴールを指定して最短経路を求める
 func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node, via []*Edge, err error) {
+	return self.ShortestPathWithMultipleGoals(start, []string{goal})
+}
+
+// スタートとゴールを指定して最短経路を求める
+func (self *DirectedGraph) ShortestPathWithMultipleGoals(start string, goals []string) (ret []*Node, via []*Edge, err error) {
 	// 名前からスタート地点のノードを取得する
 	startNode := self.nodes[start]
 
 	// スタートのコストを 0 に設定することで処理対象にする
 	startNode.cost = 0
 
+	goal := ""
 	for {
 		// 次の処理対象のノードを取得する
 		node, err := self.nextNode()
@@ -102,7 +109,8 @@ func (self *DirectedGraph) ShortestPath(start string, goal string) (ret []*Node,
 		}
 
 		// ゴールまで到達した
-		if node.name == goal {
+		if slices.Contains(goals, node.name) {
+			goal = node.name
 			break
 		}
 

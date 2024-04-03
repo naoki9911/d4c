@@ -280,7 +280,7 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 			return nil, err
 		}
 	}
-	if target, ok := base.Labels[sns.SnapshotLabelRefUncompressed]; ok {
+	if target, ok := base.Labels[sns.SnapshotLabelRefDimgId]; ok {
 		// NOTE: If passed labels include a target of the remote snapshot, `Prepare`
 		//       must log whether this method succeeded to prepare that remote snapshot
 		//       or not, using the key `remoteSnapshotLogKey` defined in the above. This

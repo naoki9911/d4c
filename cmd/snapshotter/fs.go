@@ -64,12 +64,12 @@ func (f *Di3FSManager) Mount(ctx context.Context, mountpoint string, labels map[
 		return fmt.Errorf("failed to add dimg %s to DimgStore: %v", tempDimgPath, err)
 	}
 
-	d, ok := labels[sns.SnapshotLabelRefUncompressed]
+	d, ok := labels[sns.SnapshotLabelRefDimgId]
 	if !ok {
 		return errdefs.ErrNotFound
 	}
 
-	dimgPaths, err := f.dimgStore.GetDimgPathsWithDimgDigest(digest.Digest(d))
+	dimgPaths, err := f.dimgStore.GetDimgPathsWithDimgId(digest.Digest(d))
 	if err != nil {
 		return fmt.Errorf("failed to get dimg paths for %s: %v", d, err)
 	}

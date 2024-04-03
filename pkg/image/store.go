@@ -12,7 +12,8 @@ import (
 
 type DimgEntry struct {
 	DimgHeader
-	Path string
+	Path        string
+	ConfigBytes []byte
 }
 
 type DimgStore struct {
@@ -81,7 +82,7 @@ func (ds *DimgStore) Walk() error {
 	return nil
 }
 
-func (ds *DimgStore) AddDimg(dimgPath string) error {
+func (ds *DimgStore) AddDimg(dimgPath string, configBytes ...[]byte) error {
 	ds.storeLock.Lock()
 	defer ds.storeLock.Unlock()
 
@@ -101,7 +102,13 @@ func (ds *DimgStore) AddDimg(dimgPath string) error {
 		DimgHeader: *header,
 		Path:       fPath,
 	}
-	ds.dimgGraph.Add(header.ParentId.String(), header.Id.String(), header.Digest().String(), 1)
+
+	if configBytes != nil {
+		entry.ConfigBytes = configBytes[0]
+	}
+
+	// Id -> ParentId
+	ds.dimgGraph.Add(header.Id.String(), header.ParentId.String(), header.Digest().String(), 1)
 	ds.dimgDigests[header.Digest()] = entry
 
 	return nil
@@ -109,30 +116,42 @@ func (ds *DimgStore) AddDimg(dimgPath string) error {
 
 // string[0] == top
 // string[1] == layer(parentId top.Id)
-func (ds *DimgStore) GetDimgPathsWithDimgDigest(dimgDigest digest.Digest) ([]string, error) {
+func (ds *DimgStore) GetDimgPathsWithDimgId(dimgId digest.Digest) ([]string, error) {
 	ds.storeLock.Lock()
 	defer ds.storeLock.Unlock()
 
-	targetDimg, ok := ds.dimgDigests[dimgDigest]
-	if !ok {
-		return nil, fmt.Errorf("dimg for %s not found", dimgDigest)
-	}
-
-	_, dimgs, err := ds.dimgGraph.ShortestPath("", targetDimg.Id.String())
+	// start search from current Id towards baseId(="")
+	dimgs, err := ds.GetDimgEntriesWithDimgIds(dimgId, []digest.Digest{""})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get shortest path for %s: %v", targetDimg.Id, err)
+		return nil, fmt.Errorf("failed to get dimgs: %v", err)
 	}
 
-	paths := make([]string, len(dimgs))
+	paths := make([]string, 0)
+	for _, dimg := range dimgs {
+		paths = append(paths, dimg.Path)
+	}
+
+	return paths, nil
+}
+
+func (ds *DimgStore) GetDimgEntriesWithDimgIds(startDimgId digest.Digest, goalDimgIds []digest.Digest) ([]*DimgEntry, error) {
+	goals := []string{}
+	for _, dimg := range goalDimgIds {
+		goals = append(goals, dimg.String())
+	}
+	_, dimgs, err := ds.dimgGraph.ShortestPathWithMultipleGoals(startDimgId.String(), goals)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shortest path from %s to %v: %v", startDimgId, goals, err)
+	}
+
+	dimgChain := make([]*DimgEntry, len(dimgs))
 	for i, dimgEdge := range dimgs {
 		dimg, ok := ds.dimgDigests[digest.Digest(dimgEdge.GetName())]
 		if !ok {
 			return nil, fmt.Errorf("dimg for %s not found", dimgEdge.GetName())
 		}
-		// dimgs are ordered from base to top
-		// we need to reverse the path
-		paths[len(dimgs)-i-1] = dimg.Path
+		dimgChain[i] = dimg
 	}
 
-	return paths, nil
+	return dimgChain, nil
 }

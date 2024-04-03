@@ -29,6 +29,7 @@ type CdimgHeadHeader struct {
 	ManifestDigest digest.Digest `json:"manifestDigest"`
 	ConfigSize     int64         `json:"configSize"`
 	DimgSize       int64         `json:"dimgSize"`
+	DimgDigest     digest.Digest `json:"dimgDigest"`
 }
 
 type CdimgHeader struct {
@@ -37,7 +38,6 @@ type CdimgHeader struct {
 	ManifestBytes []byte
 	Config        v1.Image
 	ConfigBytes   []byte
-	DimgDigest    digest.Digest
 }
 
 type CdimgFile struct {
@@ -174,7 +174,7 @@ func WriteCdimgHeader(configReader io.Reader, dimgHeader *DimgHeader, dimgSize i
 		return err
 	}
 
-	dimgId := dimgHeader.Digest()
+	dimgId := dimgHeader.Id
 	config.RootFS.DiffIDs = []digest.Digest{dimgId}
 	configBytes, err := json.Marshal(config)
 	if err != nil {
@@ -224,6 +224,7 @@ func WriteCdimgHeader(configReader io.Reader, dimgHeader *DimgHeader, dimgSize i
 	}
 	logger.Debugf("compressed config (size=%d)", head.ConfigSize)
 
+	head.DimgDigest = dimgHeader.Digest()
 	head.DimgSize = dimgSize
 
 	headCompressedBytes, err := head.pack()
@@ -307,7 +308,6 @@ func LoadCdimgHeader(r io.Reader) (*CdimgHeader, int64, error) {
 	header.Config = config
 	header.ConfigBytes = configBytes
 
-	header.DimgDigest = config.RootFS.DiffIDs[0]
 	return &header, curOffset, nil
 }
 

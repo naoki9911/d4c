@@ -91,6 +91,16 @@ func (df *DimgFile) Close() error {
 	return nil
 }
 
+// This may close myself
+func (df *DimgFile) WriteAll(w io.Writer) (int64, error) {
+	_, err := df.file.Seek(0, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	return io.Copy(w, df.file)
+}
+
 func (df *DimgFile) ReadAt(b []byte, off int64) (int, error) {
 	return df.file.ReadAt(b, df.bodyOffset+off)
 }

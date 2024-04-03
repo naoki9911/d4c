@@ -6,6 +6,23 @@ mount | grep fuse-diff | awk '{print $3}' | while read MOUNT; do fusermount3 -u 
 
 set -eu
 
+function validate_snapshots() {
+    ctr snapshot --snapshotter=di3fs tree | while read SNP; do 
+        SNP_IMAGE_TAG=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.image.name"')
+        MOUNT_PATH=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.mount"')
+        IMAGE_TAG=(${SNP_IMAGE_TAG//:/ })
+        SNP_IMAGE_NAME=${IMAGE_TAG[0]}
+        SNP_IMAGE_NAME=(${SNP_IMAGE_NAME//-/ })
+        SNP_IMAGE_NAME=${SNP_IMAGE_NAME[0]}
+        SNP_IMAGE_VERSION=${IMAGE_TAG[1]}
+    
+        if [ "$SNP_IMAGE_NAME" == "$IMAGE_NAME" ]; then
+            echo "Checking $SNP_IMAGE_TAG at $MOUNT_PATH"
+            sudo diff -r $SNP_IMAGE_VERSION $MOUNT_PATH --no-dereference
+        fi
+    done
+}
+
 TEST_SCRIPT=$1
 IMAGE_DIR=$2
 RUN_NUM=$3
@@ -37,137 +54,28 @@ IMAGE_PATH=$(pwd)
 systemd-run --unit=d4c-server $BIN_SERVER --threadNum $THREAD_NUM
 systemd-run --unit=d4c-snapshotter $BIN_SNAPSHOTTER
 systemctl restart containerd
+
 sleep 2
 
-curl -XDELETE http://$SERVER_HOST/diffData/cleanup
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_LOWER/config.json --dimg $IMAGE_PATH/$IMAGE_LOWER.dimg --out $IMAGE_PATH/$IMAGE_LOWER.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/$IMAGE_MIDDLE.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg --out $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg --out $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg
 
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
-        "version":"$IMAGE_LOWER",
-        "baseVersion":""
-}
-EOF
+curl -XDELETE http://$SERVER_HOST/cleanup
 
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
-        "version":"$IMAGE_MIDDLE",
-        "baseVersion":""
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
-        "version":"$IMAGE_MIDDLE",
-        "baseVersion":"$IMAGE_LOWER"
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME",
-        "fileName":"$IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_UPPER/config.json",
-        "version":"$IMAGE_UPPER",
-        "baseVersion":"$IMAGE_MIDDLE"
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-stack",
-        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
-        "version":"$IMAGE_LOWER",
-        "baseVersion":""
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-stack",
-        "fileName":"$IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
-        "version":"$IMAGE_MIDDLE",
-        "baseVersion":"$IMAGE_LOWER"
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-stack",
-        "fileName":"$IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_UPPER/config.json",
-        "version":"$IMAGE_UPPER",
-        "baseVersion":"$IMAGE_MIDDLE"
-}
-EOF
-
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/$IMAGE_LOWER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_LOWER/config.json",
-        "version":"$IMAGE_LOWER",
-        "baseVersion":""
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/$IMAGE_MIDDLE.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
-        "version":"$IMAGE_MIDDLE",
-        "baseVersion":""
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_MIDDLE/config.json",
-        "version":"$IMAGE_MIDDLE",
-        "baseVersion":"$IMAGE_LOWER"
-}
-EOF
-
-curl -XPOST http://$SERVER_HOST/diffData/add \
-     -d @- <<EOF
-{
-        "imageName": "$IMAGE_NAME-file",
-        "fileName":"$IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg",
-        "configPath":"$IMAGE_PATH/image-$IMAGE_UPPER/config.json",
-        "version":"$IMAGE_UPPER",
-        "baseVersion":"$IMAGE_MIDDLE"
-}
-EOF
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_LOWER.cdimg --imageTag $IMAGE_NAME:$IMAGE_LOWER
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_MIDDLE.cdimg --imageTag $IMAGE_NAME:$IMAGE_MIDDLE
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg --imageTag $IMAGE_NAME:$IMAGE_UPPER
 
 $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST --expectedDimgsNum 1
     ctr image rm $IMAGE_NAME:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
@@ -176,23 +84,33 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_LOWER --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_MIDDLE ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST --expectedDimgsNum 1
     ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
 done
 
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:binary-diff pull --image $IMAGE_NAME:$IMAGE_UPPER --benchmark --host $SERVER_HOST --expectedDimgsNum 2
     ctr image rm $IMAGE_NAME:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME:$IMAGE_LOWER
+
+sleep 2
+validate_snapshots
+
+curl -XDELETE http://$SERVER_HOST/cleanup
+
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_LOWER.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_LOWER
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_MIDDLE.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_MIDDLE
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_UPPER
 
 $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_MIDDLE,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST --expectedDimgsNum 1
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_MIDDLE
@@ -201,40 +119,18 @@ $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_LOWER --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_MIDDLE ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_MIDDLE,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --benchmark --host $SERVER_HOST --expectedDimgsNum 1
     ctr image rm $IMAGE_NAME-file:$IMAGE_MIDDLE
 done
 
 for ((j=0; j < $RUN_NUM; j++));do
     NOW_COUNT=$(expr $j + 1)
     echo "Benchmark pull $IMAGE_NAME-file:$IMAGE_UPPER ($NOW_COUNT/$RUN_NUM)"
-    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST
+    $BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:file-diff pull --image $IMAGE_NAME-file:$IMAGE_UPPER --benchmark --host $SERVER_HOST --expectedDimgsNum 2
     ctr image rm $IMAGE_NAME-file:$IMAGE_UPPER
 done
 ctr image rm $IMAGE_NAME-file:$IMAGE_LOWER
-
-$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_LOWER --host $SERVER_HOST
-$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_MIDDLE --host $SERVER_HOST
-$BIN_CTR_CLI pull --image $IMAGE_NAME-stack:$IMAGE_UPPER --host $SERVER_HOST
-ctr image rm $IMAGE_NAME-stack:$IMAGE_UPPER
-ctr image rm $IMAGE_NAME-stack:$IMAGE_MIDDLE
-ctr image rm $IMAGE_NAME-stack:$IMAGE_LOWER
-
-sleep 1
-ctr snapshot --snapshotter=di3fs tree | while read SNP; do 
-    SNP_IMAGE_TAG=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.image.name"')
-    MOUNT_PATH=$(ctr snapshot --snapshotter=di3fs info $SNP | jq -r '.Labels."containerd.io/snapshot/di3fs.mount"')
-    IMAGE_TAG=(${SNP_IMAGE_TAG//:/ })
-    SNP_IMAGE_NAME=${IMAGE_TAG[0]}
-    SNP_IMAGE_NAME=(${SNP_IMAGE_NAME//-/ })
-    SNP_IMAGE_NAME=${SNP_IMAGE_NAME[0]}
-    SNP_IMAGE_VERSION=${IMAGE_TAG[1]}
-
-    if [ "$SNP_IMAGE_NAME" == "$IMAGE_NAME" ]; then
-        echo "Checking $SNP_IMAGE_TAG at $MOUNT_PATH"
-        sudo diff -r $SNP_IMAGE_VERSION $MOUNT_PATH --no-dereference
-    fi
-done
+validate_snapshots
 
 systemctl stop d4c-server
 systemctl stop d4c-snapshotter

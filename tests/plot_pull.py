@@ -17,7 +17,7 @@ with open(sys.argv[1]) as f:
         if r["taskName"] != "pull":
             continue
         labels = r["labels"]
-        name = "{}-{}-{}".format(labels["imageName"], labels["baseVersion"], labels["version"])
+        name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
         valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
         if labels["mode"] == "binary-diff":
             if name not in binary_pull_time:
@@ -36,7 +36,7 @@ with open(sys.argv[1]) as f:
         if r["taskName"] != "pull-download":
             continue
         labels = r["labels"]
-        name = "{}-{}-{}".format(labels["imageName"], labels["baseVersion"], labels["version"])
+        name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
         valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
         if labels["mode"] == "binary-diff":
             if name not in binary_download_time:
