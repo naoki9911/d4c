@@ -37,19 +37,52 @@ var Flags = []cli.Flag{
 
 func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersion string, imageHeader *image.CdimgHeader, dimgPath string) error {
 	cs := snClient.CtrClient.ContentStore()
-	err := cs.Delete(ctx, imageHeader.Head.ManifestDigest)
+
+	configSize, configDigest, err := utils.GetSizeAndDigest(imageHeader.ConfigBytes)
 	if err != nil {
-		log.G(ctx).Infof("%s is already removed: %v", imageHeader.Head.ManifestDigest, err)
+		return err
 	}
-	err = content.WriteBlob(ctx, cs, imageHeader.Head.ManifestDigest.Hex(), bytes.NewReader(imageHeader.ManifestBytes),
+
+	dimgId := imageHeader.Config.RootFS.DiffIDs[0]
+
+	manifest := v1.Manifest{
+		MediaType: v1.MediaTypeImageManifest,
+		Config: v1.Descriptor{
+			MediaType: v1.MediaTypeImageConfig,
+			Size:      configSize,
+			Digest:    *configDigest,
+		},
+		Layers: []v1.Descriptor{
+			{
+				MediaType: v1.MediaTypeImageLayer,
+				Size:      imageHeader.Head.DimgSize,
+				Digest:    dimgId,
+			},
+		},
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal manifest: %v", err)
+	}
+	_, manifestDigest, err := utils.GetSizeAndDigest(manifestBytes)
+	if err != nil {
+		return fmt.Errorf("failed to get digest for manifest: %v", err)
+	}
+
+	err = cs.Delete(ctx, *manifestDigest)
+	if err != nil {
+		log.G(ctx).Infof("%s is already removed: %v", manifestDigest, err)
+	}
+
+	err = content.WriteBlob(ctx, cs, manifestDigest.Hex(), bytes.NewReader(manifestBytes),
 		v1.Descriptor{
-			Size:   int64(len(imageHeader.ManifestBytes)),
-			Digest: imageHeader.Head.ManifestDigest,
+			Size:   int64(len(manifestBytes)),
+			Digest: *manifestDigest,
 		},
 		content.WithLabels(map[string]string{
 			sns.NerverGC:         "hoghoge",
 			sns.ImageLabelPuller: "di3fs",
-			fmt.Sprintf("%s.config", sns.ContentLabelContainerdGC): imageHeader.Manifest.Config.Digest.String(),
+			//fmt.Sprintf("%s.config", sns.ContentLabelContainerdGC): imageHeader.Manifest.Config.Digest.String(),
 			//fmt.Sprintf("%s.di3fs", ContentLabelContainerdGC):  dId.String(),
 		}),
 	)
@@ -59,10 +92,10 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	log.G(ctx).Debug("load manifest done")
 
 	err = content.WriteBlob(
-		ctx, cs, imageHeader.Manifest.Config.Digest.Hex(), bytes.NewReader(imageHeader.ConfigBytes),
+		ctx, cs, configDigest.Hex(), bytes.NewReader(imageHeader.ConfigBytes),
 		v1.Descriptor{
 			Size:   int64(len(imageHeader.ConfigBytes)),
-			Digest: imageHeader.Manifest.Config.Digest,
+			Digest: *configDigest,
 		},
 		content.WithLabels(map[string]string{
 			sns.NerverGC: "hoghoge",
@@ -73,20 +106,14 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 	log.G(ctx).Debug("load config done")
 
-	manifest := v1.Manifest{}
-	err = json.Unmarshal(imageHeader.ManifestBytes, &manifest)
-	if err != nil {
-		return err
-	}
-
 	// register image
 	is := snClient.CtrClient.ImageService()
 	_, err = is.Create(ctx, images.Image{
 		Name: imageName + ":" + imageVersion,
 		Target: v1.Descriptor{
 			MediaType: sns.ImageMediaTypeManifestV2,
-			Digest:    imageHeader.Head.ManifestDigest,
-			Size:      int64(len(imageHeader.ManifestBytes)),
+			Digest:    *manifestDigest,
+			Size:      int64(len(manifestBytes)),
 		},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -101,14 +128,14 @@ func LoadImage(snClient *sns.Client, ctx context.Context, imageName, imageVersio
 	}
 
 	// now ready to create snapshot
-	err = sns.CreateSnapshot(ctx, snClient.SnClient, imageHeader.Head.ManifestDigest, manifest.Layers[0].Digest, imageName+":"+imageVersion, dimgPath)
+	err = sns.CreateSnapshot(ctx, snClient.SnClient, *manifestDigest, dimgId, imageName+":"+imageVersion, dimgPath)
 	if err != nil {
 		return err
 	}
 
 	log.G(ctx).WithFields(logrus.Fields{
 		"header":   imageHeader,
-		"manifest": imageHeader.Manifest,
+		"manifest": manifest,
 		"config":   imageHeader.Config,
 	}).Debugf("image loaded")
 

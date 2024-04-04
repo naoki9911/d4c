@@ -74,10 +74,7 @@ func cdimgAction(c *cli.Context) error {
 	}
 	defer cdimgFile.Close()
 	header := cdimgFile.Header
-	head := header.Head
 
-	fmt.Printf("Manifest Digest: %s\n", head.ManifestDigest)
-	fmt.Printf("Manifest: %v\n", header.Manifest)
 	fmt.Printf("Config: %v\n", header.Config)
 	fmt.Printf("DimgDigest: %s\n", header.Head.DimgDigest)
 	fmt.Printf("DimgID: %s\n", cdimgFile.Dimg.Header().Id)

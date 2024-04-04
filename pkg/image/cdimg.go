@@ -25,19 +25,15 @@ var logger = log.G(context.TODO())
 // [ content body(dimg) ]
 
 type CdimgHeadHeader struct {
-	ManifestSize   int64         `json:"manifestSize"`
-	ManifestDigest digest.Digest `json:"manifestDigest"`
-	ConfigSize     int64         `json:"configSize"`
-	DimgSize       int64         `json:"dimgSize"`
-	DimgDigest     digest.Digest `json:"dimgDigest"`
+	ConfigSize int64         `json:"configSize"`
+	DimgSize   int64         `json:"dimgSize"`
+	DimgDigest digest.Digest `json:"dimgDigest"`
 }
 
 type CdimgHeader struct {
-	Head          CdimgHeadHeader
-	Manifest      v1.Manifest
-	ManifestBytes []byte
-	Config        v1.Image
-	ConfigBytes   []byte
+	Head        CdimgHeadHeader
+	Config      v1.Image
+	ConfigBytes []byte
 }
 
 type CdimgFile struct {
@@ -181,43 +177,6 @@ func WriteCdimgHeader(configReader io.Reader, dimgHeader *DimgHeader, dimgSize i
 		return err
 	}
 
-	configSize, configDigest, err := utils.GetSizeAndDigest(configBytes)
-	if err != nil {
-		return err
-	}
-
-	manifest := v1.Manifest{
-		MediaType: v1.MediaTypeImageManifest,
-		Config: v1.Descriptor{
-			MediaType: v1.MediaTypeImageConfig,
-			Size:      configSize,
-			Digest:    *configDigest,
-		},
-		Layers: []v1.Descriptor{
-			{
-				MediaType: v1.MediaTypeImageLayer,
-				Size:      dimgSize,
-				Digest:    dimgId,
-			},
-		},
-	}
-	manifest.SchemaVersion = 2
-	manifestBytes, err := json.Marshal(manifest)
-	if err != nil {
-		return err
-	}
-	_, manifestDigest, err := utils.GetSizeAndDigest(manifestBytes)
-	if err != nil {
-		return err
-	}
-	head.ManifestDigest = *manifestDigest
-
-	head.ManifestSize, err = packBytes(manifestBytes, &outBytes)
-	if err != nil {
-		return err
-	}
-	logger.Debugf("compressed manifest (size=%d)", head.ManifestSize)
-
 	head.ConfigSize, err = packBytes(configBytes, &outBytes)
 	if err != nil {
 		return err
@@ -269,25 +228,6 @@ func LoadCdimgHeader(r io.Reader) (*CdimgHeader, int64, error) {
 	}
 	header.Head = *head
 	curOffset += int64(len(headerBytes))
-
-	// load manifest
-	manifestZstdBytes := make([]byte, header.Head.ManifestSize)
-	_, err = r.Read(manifestZstdBytes)
-	if err != nil {
-		return nil, 0, err
-	}
-	manifestBytes, err := utils.DecompressWithZstd(manifestZstdBytes)
-	if err != nil {
-		return nil, 0, err
-	}
-	curOffset += int64(len(manifestZstdBytes))
-	var manifest v1.Manifest
-	err = json.Unmarshal(manifestBytes, &manifest)
-	if err != nil {
-		return nil, 0, err
-	}
-	header.Manifest = manifest
-	header.ManifestBytes = manifestBytes
 
 	// load config
 	configZstdBytes := make([]byte, header.Head.ConfigSize)
