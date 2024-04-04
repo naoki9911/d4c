@@ -2,6 +2,7 @@ package image
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -57,6 +58,26 @@ func writePatch(w io.Writer, size uint64, blocks []DiffBlock, mode bsdiffx.Compr
 		return err
 	}
 	defer writer.Close()
+
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	// if oldPos is not 0, then it needs to add ctrl block to seek old pos.
+	if blocks[0].oldPos != 0 {
+		err = writeInt64(writer, 0) // ctrl0 (length of addBytes)
+		if err != nil {
+			return err
+		}
+		err = writeInt64(writer, 0) // ctrl1 (length of insertBytes)
+		if err != nil {
+			return err
+		}
+		err = writeInt64(writer, blocks[0].oldPos) // ctrl2 (length to seek old pos)
+		if err != nil {
+			return err
+		}
+	}
 
 	for i, b := range blocks {
 		ctrl0 := int64(len(b.addBytes))
@@ -190,7 +211,10 @@ func readContent(newSize uint64, reader io.Reader) ([]DiffBlock, error) {
 		}
 
 		block.insertBytes = insert
-		blocks = append(blocks, block)
+
+		if len(block.addBytes) != 0 || len(block.insertBytes) != 0 {
+			blocks = append(blocks, block)
+		}
 
 		newPos += ctrl1
 		oldPos += ctrl2
@@ -269,6 +293,7 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 				return nil, fmt.Errorf("invalid lower blocks")
 			}
 			if state == 1 {
+				checkBlock(&mergeBlock, base, updated)
 				merged = append(merged, mergeBlock)
 				mergeBlock = NewDiffBlock(0, 0)
 				state = 0
@@ -293,6 +318,7 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 						addLen := min(lowerAddRestBytesLen, upperAddRestBytesLen)
 						log.Tracef("lower=ADD upper=ADD len=%d\n", addLen)
 						if state == 2 {
+							checkBlock(&mergeBlock, base, updated)
 							merged = append(merged, mergeBlock)
 							mergeBlock = NewDiffBlock(0, 0)
 							state = 0
@@ -369,50 +395,47 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 					}
 				}
 			}
-			if base != nil && updated != nil {
-				baseAddBytes := make([]byte, len(mergeBlock.addBytes))
-				patchedBytes := make([]byte, len(mergeBlock.addBytes)+len(mergeBlock.insertBytes))
-				updatedBytes := make([]byte, len(mergeBlock.addBytes)+len(mergeBlock.insertBytes))
-				_, err := base.ReadAt(baseAddBytes, mergeBlock.oldPos)
-				if err != nil {
-					return nil, err
-				}
-				_, err = updated.ReadAt(updatedBytes, mergeBlock.newPos)
-				if err != nil {
-					return nil, err
-				}
-
-				for i := 0; i < len(baseAddBytes); i++ {
-					patchedBytes[i] = baseAddBytes[i] + mergeBlock.addBytes[i]
-				}
-				for i := 0; i < len(mergeBlock.insertBytes); i++ {
-					patchedBytes[i+len(mergeBlock.addBytes)] = mergeBlock.insertBytes[i]
-				}
-				if !bytes.Equal(updatedBytes, patchedBytes) {
-					fmt.Printf("ans=%v\n", updatedBytes)
-					fmt.Printf("patched=%v\n", patchedBytes)
-					log.Panicf("Coruppted! oldPos=%d newPos=%d len=%d", mergeBlock.oldPos, mergeBlock.newPos, len(updatedBytes))
-				} else {
-					fmt.Printf("VERIFY OK\n")
-				}
-			}
-
-			//if !merging {
-			//	merged = append(merged, mergeBlock)
-			//} else {
-			//	merged[len(merged)-1] = mergeBlock
-			//}
 		}
 		if state == 1 || state == 2 {
+			checkBlock(&mergeBlock, base, updated)
 			merged = append(merged, mergeBlock)
 		}
-		//fmt.Println(merged)
 	}
 
 	return merged, nil
 }
 
-func deltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
+func checkBlock(mergeBlock *DiffBlock, base, updated *os.File) {
+	if base != nil && updated != nil {
+		baseAddBytes := make([]byte, len(mergeBlock.addBytes))
+		patchedBytes := make([]byte, len(mergeBlock.addBytes)+len(mergeBlock.insertBytes))
+		updatedBytes := make([]byte, len(mergeBlock.addBytes)+len(mergeBlock.insertBytes))
+		_, err := base.ReadAt(baseAddBytes, mergeBlock.oldPos)
+		if err != nil {
+			panic(err)
+		}
+		_, err = updated.ReadAt(updatedBytes, mergeBlock.newPos)
+		if err != nil {
+			panic(err)
+		}
+
+		for i := 0; i < len(baseAddBytes); i++ {
+			patchedBytes[i] = baseAddBytes[i] + mergeBlock.addBytes[i]
+		}
+		for i := 0; i < len(mergeBlock.insertBytes); i++ {
+			patchedBytes[i+len(mergeBlock.addBytes)] = mergeBlock.insertBytes[i]
+		}
+		if !bytes.Equal(updatedBytes, patchedBytes) {
+			fmt.Printf("ans=%v\n", updatedBytes)
+			fmt.Printf("patched=%v\n", patchedBytes)
+			log.Panicf("Coruppted! oldPos=%d newPos=%d len=%d", mergeBlock.oldPos, mergeBlock.newPos, len(updatedBytes))
+		} else {
+			fmt.Printf("VERIFY OK at %d (%d)\n", mergeBlock.newPos, len(updatedBytes))
+		}
+	}
+}
+
+func DeltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 	lowerBlocks, _, _, err := readPatch(lowerDiff)
 	if err != nil {
 		return err
@@ -435,6 +458,66 @@ func deltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) err
 	return nil
 }
 
+func DeltaMergingBytesDebug(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, base, updated *os.File) error {
+	lowerBlocks, _, _, err := readPatch(lowerDiff)
+	if err != nil {
+		return err
+	}
+	upperBlocks, newLen, compMode, err := readPatch(upperDiff)
+	if err != nil {
+		return err
+	}
+
+	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, base, updated)
+	if err != nil {
+		return err
+	}
+
+	tmpMerged := bytes.Buffer{}
+	err = writePatch(&tmpMerged, newLen, mergedBlocks, compMode)
+	if err != nil {
+		return err
+	}
+
+	tmpMergedBlocks, _, _, err := readPatch(&tmpMerged)
+	if err != nil {
+		return err
+	}
+
+	if len(mergedBlocks) != len(tmpMergedBlocks) {
+		return fmt.Errorf("unmatched length expected=%d actual=%d", len(mergedBlocks), len(tmpMergedBlocks))
+	}
+
+	for i := range mergedBlocks {
+		m := mergedBlocks[i]
+		tmpM := tmpMergedBlocks[i]
+		//fmt.Printf("block[%d] oldPos=%d newPos=%d\n", i, m.oldPos, m.newPos)
+
+		if m.newPos != tmpM.newPos {
+			return fmt.Errorf("block[%d] unmatched newPos expected=%d actual=%d", i, m.newPos, tmpM.newPos)
+		}
+
+		if m.oldPos != tmpM.oldPos {
+			return fmt.Errorf("block[%d] unmatched oldPos expected=%d actual=%d", i, m.oldPos, tmpM.oldPos)
+		}
+
+		if !bytes.Equal(m.addBytes, tmpM.addBytes) {
+			return fmt.Errorf("block[%d] unmatched addBytes", i)
+		}
+
+		if !bytes.Equal(m.insertBytes, tmpM.insertBytes) {
+			return fmt.Errorf("block[%d] unmatched insertBytes", i)
+		}
+	}
+
+	fmt.Printf("blocks are OK\n")
+	err = writePatch(mergedDiff, newLen, mergedBlocks, compMode)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 var ErrUnexpected = fmt.Errorf("unexpected error")
 
 type mergeTask struct {
@@ -451,14 +534,18 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 	writeTasks := make(chan mergeTask, 1000)
 	wg := sync.WaitGroup{}
 
+	var gErr error
+	ctx, cancel := context.WithCancel(context.Background())
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
 		logger.Info("started merge task enqueue thread")
 		err := enqueueMergeTaskToQueue(lowerEntry, upperEntry, mergeTasks)
 		if err != nil {
-			logger.Errorf("failed to enqueue: %v", err)
+			gErr = fmt.Errorf("failed to enqueue: %v", err)
+			cancel()
+			logger.Errorf("merge task enqueu thread: %v", gErr)
 		}
 		close(mergeTasks)
 		logger.Info("finished mege task enqueue thread")
@@ -468,16 +555,25 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 	go func() {
 		defer wg.Done()
 		logger.Info("started merge write thread")
-		for {
-			mt, more := <-writeTasks
-			if !more {
-				break
-			}
-			mt.upperEntry.Offset = int64(mergeOut.Len())
-			_, err := mergeOut.Write(mt.data)
-			if err != nil {
-				logger.Errorf("failed to write to mergeOut: %v", err)
-				return
+		cont := true
+		for cont {
+			select {
+			case <-ctx.Done():
+				logger.Infof("merge write thread canceled")
+				cont = false
+			case mt, more := <-writeTasks:
+				if !more {
+					cont = false
+					break
+				}
+				mt.upperEntry.Offset = int64(mergeOut.Len())
+				_, err := mergeOut.Write(mt.data)
+				if err != nil {
+					gErr = fmt.Errorf("failed to write to mergeOut: %v", err)
+					cancel()
+					logger.Errorf("merge write thread: %v", gErr)
+					return
+				}
 			}
 		}
 		logger.Info("finished merge write thread")
@@ -491,113 +587,142 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 			logger.Infof("started merge thread idx=%d", threadId)
 			defer wg.Done()
 			defer mergeWg.Done()
-			for {
-				mt, more := <-mergeTasks
-				if !more {
-					break
-				}
-				start := time.Now()
-				mode := ""
-				if mt.lowerEntry != nil && mt.upperEntry != nil {
-					if mt.lowerEntry.Type == FILE_ENTRY_FILE_NEW && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
+			cont := true
+			for cont {
+				select {
+				case <-ctx.Done():
+					logger.Infof("merge thread canceled")
+					cont = false
+				case mt, more := <-mergeTasks:
+					if !more {
+						cont = false
+						break
+					}
+					start := time.Now()
+					mode := ""
+					if mt.lowerEntry != nil && mt.upperEntry != nil {
+						if mt.lowerEntry.Type == FILE_ENTRY_FILE_NEW && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
+							lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
+							upperBytes := make([]byte, mt.upperEntry.CompressedSize)
+							_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)
+							if err != nil {
+								gErr = fmt.Errorf("failed to read from lowerImg: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							baseReader, err := zstd.NewReader(bytes.NewBuffer(lowerBytes))
+							if err != nil {
+								gErr = fmt.Errorf("failed to read lowerImg via zstdReader: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							defer baseReader.Close()
+
+							_, err = upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
+							if err != nil {
+								gErr = fmt.Errorf("failed to read from upperImg: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							mergeBytes := bytes.NewBuffer(nil)
+							err = bsdiffx.Patch(baseReader, mergeBytes, bytes.NewBuffer(upperBytes))
+							if err != nil {
+								gErr = fmt.Errorf("failed to patch: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+
+							mergeCompressed, err := CompressWithZstd(mergeBytes.Bytes())
+							if err != nil {
+								gErr = fmt.Errorf("failed to compresse merged bytes: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							mt.upperEntry.Type = FILE_ENTRY_FILE_NEW
+							mt.upperEntry.CompressedSize = int64(len(mergeCompressed))
+							mt.data = mergeCompressed
+							mode = "apply"
+						} else if mt.lowerEntry.Type == FILE_ENTRY_FILE_DIFF && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
+							lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
+							upperBytes := make([]byte, mt.upperEntry.CompressedSize)
+							_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)
+							if err != nil {
+								gErr = fmt.Errorf("failed to read from lowerImg: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							_, err = upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
+							if err != nil {
+								gErr = fmt.Errorf("failed to read from upperImg: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							mergeBytes := bytes.NewBuffer(nil)
+							err = DeltaMergingBytes(bytes.NewBuffer(lowerBytes), bytes.NewBuffer(upperBytes), mergeBytes)
+							if err != nil {
+								gErr = fmt.Errorf("failed to merge diffs: %v", err)
+								cancel()
+								logger.Errorf("merge thread: %v", gErr)
+								return
+							}
+							mt.upperEntry.CompressedSize = int64(mergeBytes.Len())
+							mt.data = mergeBytes.Bytes()
+							mode = "merge"
+						} else {
+							gErr = fmt.Errorf("unexpected types lower=%v upper=%v", mt.lowerEntry.Type, mt.upperEntry.Type)
+							cancel()
+							logger.Errorf("merge thread: %v", gErr)
+							return
+						}
+					} else if mt.lowerEntry != nil {
 						lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
-						upperBytes := make([]byte, mt.upperEntry.CompressedSize)
 						_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)
 						if err != nil {
-							logger.Errorf("failed to read from lowerImg: %v", err)
+							gErr = fmt.Errorf("failed to read from lowerImg: %v", err)
+							cancel()
+							logger.Errorf("merge thread: %v", gErr)
 							return
 						}
-						baseReader, err := zstd.NewReader(bytes.NewBuffer(lowerBytes))
-						if err != nil {
-							logger.Errorf("failed to read lowerImg via zstdReader: %v", err)
-							return
-						}
-						defer baseReader.Close()
-
-						_, err = upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
-						if err != nil {
-							logger.Errorf("failed to read from upperImg: %v", err)
-							return
-						}
-						mergeBytes := bytes.NewBuffer(nil)
-						err = bsdiffx.Patch(baseReader, mergeBytes, bytes.NewBuffer(upperBytes))
-						if err != nil {
-							logger.Errorf("failed to patch: %v", err)
-							return
-						}
-
-						mergeCompressed, err := CompressWithZstd(mergeBytes.Bytes())
-						if err != nil {
-							logger.Errorf("failed to compresse merged bytes: %v", err)
-							return
-						}
-						mt.upperEntry.Type = FILE_ENTRY_FILE_NEW
-						mt.upperEntry.CompressedSize = int64(len(mergeCompressed))
-						mt.data = mergeCompressed
-						mode = "apply"
-					} else if mt.lowerEntry.Type == FILE_ENTRY_FILE_DIFF && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
-						lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
+						mt.upperEntry = mt.lowerEntry
+						mt.data = lowerBytes
+						mode = "copy-lower"
+					} else if mt.upperEntry != nil {
 						upperBytes := make([]byte, mt.upperEntry.CompressedSize)
-						_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)
+						_, err := upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
 						if err != nil {
-							logger.Errorf("failed to read from lowerImg: %v", err)
+							gErr = fmt.Errorf("failed to read from upperImg: %v", err)
+							cancel()
+							gErr = fmt.Errorf("merge thread: %v", gErr)
 							return
 						}
-						_, err = upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
-						if err != nil {
-							logger.Errorf("failed to read from upperImg: %v", err)
-							return
+						mt.data = upperBytes
+						mode = "copy-upper"
+					}
+					elapsed := time.Since(start)
+					if mc.BenchmarkPerFile {
+						metric := benchmark.Metric{
+							TaskName:     "merge-per-file",
+							ElapsedMilli: int(elapsed.Milliseconds()),
+							Size:         int64(mt.upperEntry.Size),
+							Labels: map[string]string{
+								"mergeMode":      mode,
+								"compressedSize": strconv.Itoa(int(mt.upperEntry.CompressedSize)),
+							},
 						}
-						mergeBytes := bytes.NewBuffer(nil)
-						err = deltaMergingBytes(bytes.NewBuffer(lowerBytes), bytes.NewBuffer(upperBytes), mergeBytes)
+						err := mc.Benchmarker.AppendResult(metric)
 						if err != nil {
-							logger.Errorf("failed to merge diffs: %v", err)
-							return
+							panic(err)
 						}
-						mt.upperEntry.CompressedSize = int64(mergeBytes.Len())
-						mt.data = mergeBytes.Bytes()
-						mode = "merge"
-					} else {
-						logger.Errorf("unexpected types lower=%v upper=%v", mt.lowerEntry.Type, mt.upperEntry.Type)
-						return
 					}
-				} else if mt.lowerEntry != nil {
-					lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
-					_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)
-					if err != nil {
-						logger.Errorf("failed to read from lowerImg: %v", err)
-						return
-					}
-					mt.upperEntry = mt.lowerEntry
-					mt.data = lowerBytes
-					mode = "copy-lower"
-				} else if mt.upperEntry != nil {
-					upperBytes := make([]byte, mt.upperEntry.CompressedSize)
-					_, err := upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
-					if err != nil {
-						logger.Errorf("failed to read from upperImg: %v", err)
-						return
-					}
-					mt.data = upperBytes
-					mode = "copy-upper"
+					writeTasks <- mt
 				}
-				elapsed := time.Since(start)
-				if mc.BenchmarkPerFile {
-					metric := benchmark.Metric{
-						TaskName:     "merge-per-file",
-						ElapsedMilli: int(elapsed.Milliseconds()),
-						Size:         int64(mt.upperEntry.Size),
-						Labels: map[string]string{
-							"mergeMode":      mode,
-							"compressedSize": strconv.Itoa(int(mt.upperEntry.CompressedSize)),
-						},
-					}
-					err := mc.Benchmarker.AppendResult(metric)
-					if err != nil {
-						panic(err)
-					}
-				}
-				writeTasks <- mt
 			}
 			logger.Infof("finished merge thread idx=%d", threadId)
 		}(i)
@@ -610,7 +735,13 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 	}()
 	wg.Wait()
 
-	logger.Infof("mergeTasks len=%d", len(mergeTasks))
+	logger.Info("started to update dir entry")
+	updateDirFileEntry(upperEntry)
+	logger.Info("finished to update dir entry")
+
+	if gErr != nil {
+		return nil, gErr
+	}
 	return upperEntry, nil
 }
 
@@ -635,13 +766,16 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 		default:
 			lowerChild, ok := lowerEntry.Childs[upperfName]
 			if !ok {
-				return ErrUnexpected
+				for k, v := range upperChild.Childs {
+					fmt.Printf("- %s %v\n", k, EntryTypeToString(v.Type))
+				}
+				return fmt.Errorf("upperChild is %s but lowerChild(%s) not found: %v", EntryTypeToString(upperChild.Type), upperfName, upperChild.Childs)
 			}
 
 			// When the lower has SYMLINK or OPAQUE, the upper must have 'New' entries
 			// Such files must be processed above case.
 			if lowerChild.Type == FILE_ENTRY_SYMLINK || lowerChild.Type == FILE_ENTRY_OPAQUE {
-				return ErrUnexpected
+				return fmt.Errorf("lowerChild is symlink or opaque")
 			}
 
 			switch upperChild.Type {
@@ -652,7 +786,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 						return err
 					}
 				} else {
-					return ErrUnexpected
+					return fmt.Errorf("lowerChild is not directory")
 				}
 			case FILE_ENTRY_FILE_SAME:
 				// lower must have FILE_NEW or FILE_DIFF
@@ -665,7 +799,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 				} else if lowerChild.Type == FILE_ENTRY_FILE_SAME {
 					// this branch is ignored
 				} else {
-					return ErrUnexpected
+					return fmt.Errorf("upperChild is FILE_SAME but lowerChild does not have body")
 				}
 			case FILE_ENTRY_FILE_DIFF:
 				if lowerChild.Type == FILE_ENTRY_FILE_SAME {
@@ -679,7 +813,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 						upperEntry: upperChild,
 					}
 				} else {
-					return ErrUnexpected
+					return fmt.Errorf("upperChild is FILE_DIFF but lowerChild does not have body")
 				}
 			}
 		}

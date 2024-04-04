@@ -191,9 +191,9 @@ func (ds *DiffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 	}
 	logger.Infof("Dimgs are sent to client %s", dimgsMsg)
 
-	upperDimg := selectedDimgPaths[0]
-	for idx := 1; idx < len(selectedDimgPaths); idx++ {
-		lowerDimg := selectedDimgPaths[idx]
+	lowerDimg := selectedDimgPaths[len(selectedDimgPaths)-1]
+	for idx := len(selectedDimgPaths) - 2; idx >= 0; idx-- {
+		upperDimg := selectedDimgPaths[idx]
 		mergedDimgPath := filepath.Join(imageStorePath, utils.GetRandomId("d4c-server")+".dimg")
 		mergedFile, err := os.Create(mergedDimgPath)
 		if err != nil {
@@ -210,11 +210,11 @@ func (ds *DiffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		upperDimg.DimgHeader = *header
-		upperDimg.Path = mergedDimgPath
+		lowerDimg.DimgHeader = *header
+		lowerDimg.Path = mergedDimgPath
 	}
+	resDimg := lowerDimg
 
-	resDimg := upperDimg
 	resDimgFile, err := image.OpenDimgFile(resDimg.Path)
 	if err != nil {
 		logger.Errorf("failed to open dimg %s: %v", resDimg.Path, err)
