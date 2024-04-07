@@ -825,9 +825,10 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 }
 
 type MergeConfig struct {
-	ThreadNum        int
-	BenchmarkPerFile bool
-	Benchmarker      *benchmark.Benchmark
+	ThreadNum              int
+	MergeDimgConcurrentNum int
+	BenchmarkPerFile       bool
+	Benchmarker            *benchmark.Benchmark
 }
 
 func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, mc MergeConfig) (*DimgHeader, error) {
@@ -906,11 +907,16 @@ func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, mc MergeConfig)
 	return &header, nil
 }
 
-func MergeDimgsWithLinear(dimgs []*DimgEntry, tmpDir string, mc MergeConfig) (*DimgEntry, error) {
+func MergeDimgsWithLinear(dimgs []*DimgEntry, tmpDir string, mc MergeConfig, isCdimg bool) (*DimgEntry, error) {
 	lowerDimg := dimgs[len(dimgs)-1]
 	for idx := len(dimgs) - 2; idx >= 0; idx-- {
 		upperDimg := dimgs[idx]
-		mergedDimgPath := filepath.Join(tmpDir, utils.GetRandomId("merge")+".dimg")
+		var mergedDimgPath string
+		if isCdimg {
+			mergedDimgPath = filepath.Join(tmpDir, utils.GetRandomId("merge")+".cdimg")
+		} else {
+			mergedDimgPath = filepath.Join(tmpDir, utils.GetRandomId("merge")+".dimg")
+		}
 		mergedFile, err := os.Create(mergedDimgPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temporary dimg %s: %v", mergedDimgPath, err)
@@ -918,7 +924,12 @@ func MergeDimgsWithLinear(dimgs []*DimgEntry, tmpDir string, mc MergeConfig) (*D
 		defer mergedFile.Close()
 
 		logger.Infof("merge %s and %s", lowerDimg.Digest(), upperDimg.Digest())
-		header, err := MergeDimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		var header *DimgHeader
+		if isCdimg {
+			header, err = MergeCdimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		} else {
+			header, err = MergeDimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge dimgs: %v", err)
 		}
@@ -927,4 +938,119 @@ func MergeDimgsWithLinear(dimgs []*DimgEntry, tmpDir string, mc MergeConfig) (*D
 	}
 
 	return lowerDimg, nil
+}
+
+type mergeDimgTask struct {
+	lowerMergeTask *mergeDimgTask
+	upperMergeTask *mergeDimgTask
+
+	dimg *DimgEntry
+
+	done chan error
+}
+
+func MergeDimgsWithBisectMultithread(dimgs []*DimgEntry, tmpDir string, mc MergeConfig, isCdimg bool) (*DimgEntry, error) {
+	mergeTask := buildMergeDimgTask(dimgs)
+	if mergeTask == nil {
+		return nil, fmt.Errorf("mergeTasks is nil")
+	}
+
+	threadLimit := make(chan struct{}, mc.MergeDimgConcurrentNum)
+	err := runMergeDimgTask(mergeTask, tmpDir, threadLimit, mc, isCdimg)
+	if err != nil {
+		return nil, err
+	}
+
+	if mergeErr := <-mergeTask.done; mergeErr != nil {
+		return nil, fmt.Errorf("failed to merge: %v", mergeErr)
+	}
+
+	return mergeTask.dimg, nil
+}
+
+func buildMergeDimgTask(dimgs []*DimgEntry) *mergeDimgTask {
+	dimgsLen := len(dimgs)
+	switch dimgsLen {
+	case 0:
+		return nil
+	case 1:
+		return &mergeDimgTask{
+			dimg: dimgs[0],
+			done: make(chan error, 1),
+		}
+	default:
+		return &mergeDimgTask{
+			upperMergeTask: buildMergeDimgTask(dimgs[0 : dimgsLen/2]),
+			lowerMergeTask: buildMergeDimgTask(dimgs[dimgsLen/2:]),
+			done:           make(chan error, 1),
+		}
+	}
+}
+
+func runMergeDimgTask(task *mergeDimgTask, tmpDir string, threadLimit chan struct{}, mc MergeConfig, isCdimg bool) error {
+	if task.upperMergeTask == nil && task.lowerMergeTask == nil {
+		task.done <- nil
+		return nil
+	}
+
+	if task.lowerMergeTask != nil {
+		err := runMergeDimgTask(task.lowerMergeTask, tmpDir, threadLimit, mc, isCdimg)
+		if err != nil {
+			return err
+		}
+	}
+
+	if task.upperMergeTask != nil {
+		err := runMergeDimgTask(task.upperMergeTask, tmpDir, threadLimit, mc, isCdimg)
+		if err != nil {
+			return err
+		}
+	}
+
+	if lowerErr := <-task.lowerMergeTask.done; lowerErr != nil {
+		return fmt.Errorf("lowerMergeTask has error: %v", lowerErr)
+	}
+	if upperErr := <-task.upperMergeTask.done; upperErr != nil {
+		return fmt.Errorf("upperMergeTask has error: %v", upperErr)
+	}
+
+	threadLimit <- struct{}{}
+	go func() {
+		upperDimg := task.upperMergeTask.dimg
+		lowerDimg := task.lowerMergeTask.dimg
+
+		var mergedDimgPath string
+		if isCdimg {
+			mergedDimgPath = filepath.Join(tmpDir, utils.GetRandomId("merge")+".cdimg")
+		} else {
+			mergedDimgPath = filepath.Join(tmpDir, utils.GetRandomId("merge")+".dimg")
+		}
+		mergedFile, err := os.Create(mergedDimgPath)
+		if err != nil {
+			task.done <- fmt.Errorf("failed to create temporary dimg %s: %v", mergedDimgPath, err)
+			return
+		}
+		defer mergedFile.Close()
+
+		logger.Infof("merge %s and %s", lowerDimg.Digest(), upperDimg.Digest())
+		var header *DimgHeader
+		if isCdimg {
+			header, err = MergeCdimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		} else {
+			header, err = MergeDimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		}
+		if err != nil {
+			task.done <- fmt.Errorf("failed to merge: %v", err)
+			return
+		}
+
+		task.dimg = upperDimg
+		task.dimg.DimgHeader = *header
+		task.dimg.Path = mergedDimgPath
+		task.done <- nil
+
+		<-threadLimit
+	}()
+
+	return nil
 }

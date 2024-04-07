@@ -198,7 +198,8 @@ func (ds *DiffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	resDimg, err := image.MergeDimgsWithLinear(selectedDimgPaths, tmpDir, ds.mergeConfig)
+	//resDimg, err := image.MergeDimgsWithLinear(selectedDimgPaths, tmpDir, ds.mergeConfig)
+	resDimg, err := image.MergeDimgsWithBisectMultithread(selectedDimgPaths, tmpDir, ds.mergeConfig, false)
 	if err != nil {
 		logger.Errorf("failed to merge: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

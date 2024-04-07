@@ -65,6 +65,12 @@ diff_image 1.25.1 1.25.2
 diff_image 1.25.2 1.25.3
 diff_image 1.25.3 1.25.4
 
+$BIN_CTR_CLI cdimg merge --cdimgs $IMAGE_DIR/1.25.3-1.25.4.cdimg,$IMAGE_DIR/1.25.2-1.25.3.cdimg,$IMAGE_DIR/1.25.1-1.25.2.cdimg,$IMAGE_DIR/1.25.0-1.25.1.cdimg,$IMAGE_DIR/1.24.0-1.25.0.cdimg,$IMAGE_DIR/1.23.4-1.24.0.cdimg,$IMAGE_DIR/1.23.3-1.23.4.cdimg,$IMAGE_DIR/1.23.2-1.23.3.cdimg,$IMAGE_DIR/1.23.1-1.23.2.cdimg --outCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect
+rm -rf $IMAGE_DIR/1.25.4-patched
+mkdir $IMAGE_DIR/1.25.4-patched
+
+$BIN_CTR_CLI cdimg patch --baseDir $IMAGE_DIR/image-1.23.1 --outDir $IMAGE_DIR/1.25.4-patched --diffCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg
+diff -r --no-dereference $IMAGE_DIR/image-1.25.4 $IMAGE_DIR/1.25.4-patched
 
 $BIN_CTR_CLI push --cdimg $IMAGE_DIR/1.23.1.cdimg --imageTag nginx:1.23.1
 $BIN_CTR_CLI push --cdimg $IMAGE_DIR/1.23.1-1.23.2.cdimg

@@ -15,7 +15,8 @@ func main() {
 	threadNum := flag.Int("threadNum", 1, "Te number of threads to merge diffs")
 	flag.Parse()
 	mc := image.MergeConfig{
-		ThreadNum: *threadNum,
+		ThreadNum:              *threadNum,
+		MergeDimgConcurrentNum: 4,
 	}
 	ds, err := server.NewDiffServer(mc)
 	if err != nil {
