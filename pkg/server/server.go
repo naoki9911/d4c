@@ -191,29 +191,19 @@ func (ds *DiffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 	}
 	logger.Infof("Dimgs are sent to client %s", dimgsMsg)
 
-	lowerDimg := selectedDimgPaths[len(selectedDimgPaths)-1]
-	for idx := len(selectedDimgPaths) - 2; idx >= 0; idx-- {
-		upperDimg := selectedDimgPaths[idx]
-		mergedDimgPath := filepath.Join(imageStorePath, utils.GetRandomId("d4c-server")+".dimg")
-		mergedFile, err := os.Create(mergedDimgPath)
-		if err != nil {
-			logger.Errorf("failed to create temporarly dimg %s: %v", mergedDimgPath, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		defer mergedFile.Close()
-
-		logger.Infof("merge %s and %s", lowerDimg.Digest(), upperDimg.Digest())
-		header, err := image.MergeDimg(lowerDimg.Path, upperDimg.Path, mergedFile, ds.mergeConfig)
-		if err != nil {
-			logger.Errorf("failed to merge dimgs: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		lowerDimg.DimgHeader = *header
-		lowerDimg.Path = mergedDimgPath
+	tmpDir := filepath.Join(imageStorePath, utils.GetRandomId("merge-tmp"))
+	err = os.Mkdir(tmpDir, 0755)
+	if err != nil {
+		logger.Errorf("failed to create temporary directory %s: %v", tmpDir, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	resDimg := lowerDimg
+	resDimg, err := image.MergeDimgsWithLinear(selectedDimgPaths, tmpDir, ds.mergeConfig)
+	if err != nil {
+		logger.Errorf("failed to merge: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	resDimgFile, err := image.OpenDimgFile(resDimg.Path)
 	if err != nil {

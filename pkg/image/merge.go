@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -902,4 +904,27 @@ func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, mc MergeConfig)
 		return nil, fmt.Errorf("failed to write dimg: %v", err)
 	}
 	return &header, nil
+}
+
+func MergeDimgsWithLinear(dimgs []*DimgEntry, tmpDir string, mc MergeConfig) (*DimgEntry, error) {
+	lowerDimg := dimgs[len(dimgs)-1]
+	for idx := len(dimgs) - 2; idx >= 0; idx-- {
+		upperDimg := dimgs[idx]
+		mergedDimgPath := filepath.Join(tmpDir, utils.GetRandomId("merge")+".dimg")
+		mergedFile, err := os.Create(mergedDimgPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temporary dimg %s: %v", mergedDimgPath, err)
+		}
+		defer mergedFile.Close()
+
+		logger.Infof("merge %s and %s", lowerDimg.Digest(), upperDimg.Digest())
+		header, err := MergeDimg(lowerDimg.Path, upperDimg.Path, mergedFile, mc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge dimgs: %v", err)
+		}
+		lowerDimg.DimgHeader = *header
+		lowerDimg.Path = mergedDimgPath
+	}
+
+	return lowerDimg, nil
 }
