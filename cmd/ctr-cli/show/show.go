@@ -40,7 +40,7 @@ func dimgAction(c *cli.Context) error {
 		return err
 	}
 	defer dimgFile.Close()
-	header := dimgFile.Header()
+	header := dimgFile.DimgHeader()
 	fmt.Printf("ID: %s\n", header.Id)
 	fmt.Printf("ParentID: %s\n", header.ParentId)
 	return nil
@@ -77,8 +77,8 @@ func cdimgAction(c *cli.Context) error {
 
 	fmt.Printf("Config: %v\n", header.Config)
 	fmt.Printf("DimgDigest: %s\n", header.Head.DimgDigest)
-	fmt.Printf("DimgID: %s\n", cdimgFile.Dimg.Header().Id)
-	fmt.Printf("DimgParentID: %s\n", cdimgFile.Dimg.Header().ParentId)
+	fmt.Printf("DimgID: %s\n", cdimgFile.Dimg.DimgHeader().Id)
+	fmt.Printf("DimgParentID: %s\n", cdimgFile.Dimg.DimgHeader().ParentId)
 
 	return nil
 }

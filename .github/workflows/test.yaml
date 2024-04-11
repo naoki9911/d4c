@@ -313,11 +313,13 @@ jobs:
         run: |
           mkdir /tmp/benchmark-results
           sudo lxc file pull test/tmp/benchmark/benchmark.log /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/compare.log /tmp/benchmark-results/.
           sudo lxc file pull test/tmp/benchmark/diff.png /tmp/benchmark-results/.
           sudo lxc file pull test/tmp/benchmark/pull.png /tmp/benchmark-results/.
           sudo lxc file pull test/tmp/benchmark/merge.png /tmp/benchmark-results/.
           sudo lxc file pull test/tmp/benchmark/patch.png /tmp/benchmark-results/.
           sudo lxc file pull test/tmp/benchmark/file_diff.png /tmp/benchmark-results/.
+          sudo lxc file pull test/tmp/benchmark/file_compare.png /tmp/benchmark-results/.
       - uses: actions/upload-artifact@v4
         if: steps.get_result.conclusion == 'success'
         with:

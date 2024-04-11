@@ -44,14 +44,14 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer diffFile.Close()
 
 	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff, dc)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc)
 	if err != nil {
 		return err
 	}
 
 	header := DimgHeader{
-		Id:              newDimg.Header().Id,
-		ParentId:        oldDimg.Header().Id,
+		Id:              newDimg.DimgHeader().Id,
+		ParentId:        oldDimg.DimgHeader().Id,
 		CompressionMode: dc.CompressionMode,
 		FileEntry:       newDimg.header.FileEntry,
 	}
@@ -86,15 +86,15 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 	defer diffCdimg.Close()
 
 	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.Header().FileEntry, &newDimg.Header().FileEntry, &diffOut, isBinaryDiff, dc)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc)
 	if err != nil {
 		return err
 	}
 
 	diffDimgOut := bytes.Buffer{}
 	header := DimgHeader{
-		Id:              newDimg.Header().Id,
-		ParentId:        oldDimg.Header().Id,
+		Id:              newDimg.DimgHeader().Id,
+		ParentId:        oldDimg.DimgHeader().Id,
 		CompressionMode: dc.CompressionMode,
 		FileEntry:       newDimg.header.FileEntry,
 	}

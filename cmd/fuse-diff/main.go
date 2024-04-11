@@ -8,12 +8,12 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
+	"os/exec"
 	"path"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -25,47 +25,30 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func writeMemProfile(fn string, sigs <-chan os.Signal) {
-	i := 0
-	for range sigs {
-		fn := fmt.Sprintf("%s-%d.memprof", fn, i)
-		i++
+var (
+	debug       = flag.Bool("debug", false, "print debugging messages.")
+	other       = flag.Bool("allow-other", false, "mount with -o allowother.")
+	bench       = flag.Bool("benchmark", false, "measure benchmark")
+	parentDimg  = flag.String("parentDimg", "", "path to parent dimg")
+	diffDimg    = flag.String("diffDimg", "", "path to diff dimg")
+	parentCdimg = flag.String("parentCdimg", "", "path to parent cdimg")
+	diffCdimg   = flag.String("diffCdimg", "", "path to diff cdimg")
+	label       = flag.String("label", "", "label for benchmark")
+	daemon      = flag.Bool("daemon", false, "run as daemon")
+	child       = flag.Bool("child", false, "run as child process (internal use)")
+)
 
-		log.Printf("Writing mem profile to %s\n", fn)
-		f, err := os.Create(fn)
-		if err != nil {
-			log.Printf("Create: %v", err)
-			continue
-		}
-		err = pprof.WriteHeapProfile(f)
-		if err != nil {
-			log.Printf("failed WriteHeapProfile: %v", err)
-		}
-		if err := f.Close(); err != nil {
-			log.Printf("close %v", err)
-		}
-	}
-}
+const (
+	CHILD_READY byte = 0
+	CHILD_ERROR byte = 1
+)
 
 func main() {
-	start := time.Now()
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	customFormatter.FullTimestamp = true
 	log.SetFormatter(customFormatter)
 	log.SetLevel(log.InfoLevel)
-
-	// Scans the arg list and sets up flags
-	debug := flag.Bool("debug", false, "print debugging messages.")
-	other := flag.Bool("allow-other", false, "mount with -o allowother.")
-	bench := flag.Bool("benchmark", false, "measure benchmark")
-	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to this file")
-	memprofile := flag.String("memprofile", "", "write memory profile to this file")
-	parentDimg := flag.String("parentDimg", "", "path to parent dimg")
-	diffDimg := flag.String("diffDimg", "", "path to diff dimg")
-	parentCdimg := flag.String("parentCdimg", "", "path to parent cdimg")
-	diffCdimg := flag.String("diffCdimg", "", "path to diff cdimg")
-	label := flag.String("label", "", "label for benchmark")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Printf("usage: %s MOUNTPOINT\n", path.Base(os.Args[0]))
@@ -74,75 +57,148 @@ func main() {
 		os.Exit(2)
 	}
 
+	if !*daemon {
+		// not daemon
+		err := runMain(false, nil)
+		if err != nil {
+			log.Fatalf("error occured: %v", err)
+		}
+		return
+	}
+
+	if *child {
+		pipe := os.NewFile(uintptr(3), "pipe")
+		if pipe == nil {
+			panic("fd 3 is not valid")
+		}
+		defer pipe.Close()
+		err := runMain(true, pipe)
+		if err != nil {
+			log.Errorf("error occured: %v", err)
+
+			// notify error to parent process via pipe
+			errMsg := fmt.Sprintf("child error: %v", err)
+			msgLen := 1 + 2 + len(errMsg)
+			msgBytes := make([]byte, msgLen)
+			msgBytes[0] = CHILD_ERROR
+			binary.LittleEndian.PutUint16(msgBytes[1:], uint16(len(errMsg)))
+			copy(msgBytes[3:], errMsg)
+			_, err = pipe.Write(msgBytes)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return
+	}
+
+	// thanks to https://qiita.com/hironobu_s/items/77d99436457ef57889d6
+	args := []string{"--child"}
+	args = append(args, os.Args[1:]...)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.ExtraFiles = []*os.File{w}
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	if err = cmd.Start(); err != nil {
+		panic(err)
+	}
+
+	// wait for the child process is ready
+	readyBuf := make([]byte, 1)
+	_, err = r.Read(readyBuf)
+	if err != nil {
+		panic(err)
+	}
+	if readyBuf[0] == CHILD_READY {
+		log.Infof("successfully started child process")
+		return
+	} else {
+		log.Errorf("child process encountered error")
+		readyBuf = make([]byte, 2)
+		cnt, err := r.Read(readyBuf)
+		if err != nil {
+			log.Fatalf("failed to read message length from pipe: %v", err)
+		}
+		if cnt != 2 {
+			log.Fatalf("invalid msg length header %d", cnt)
+		}
+		msgLen := binary.LittleEndian.Uint16(readyBuf)
+		log.Errorf("message length %d", msgLen)
+		readyBuf = make([]byte, msgLen)
+		cnt, err = r.Read(readyBuf)
+		if err != nil {
+			log.Fatalf("failed to read message from pipe: %v", err)
+		}
+		log.Fatalf("child error: %s", string(readyBuf[0:cnt]))
+	}
+}
+
+func runMain(isChild bool, readyFd *os.File) error {
+	if isChild {
+		// this cause error in fs.Mount with 'waitid: no child processe'
+		//signal.Ignore(syscall.SIGCHLD)
+		syscall.Close(0)
+		syscall.Close(1)
+		syscall.Close(2)
+		_, err := syscall.Setsid()
+		if err != nil {
+			return fmt.Errorf("failed to setsid(): %s", err)
+		}
+		syscall.Umask(022)
+	}
+
+	start := time.Now()
+
 	var b *benchmark.Benchmark = nil
 	var err error
 	if *bench {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
-			panic(err)
+			return err
 		}
-	}
-	if *cpuprofile != "" {
-		fmt.Printf("Writing cpu profile to %s\n", *cpuprofile)
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(3)
-		}
-		err = pprof.StartCPUProfile(f)
-		if err != nil {
-			log.Fatalf("failed to start CPUProfile: %v", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-	if *memprofile != "" {
-		log.Printf("send SIGUSR1 to %d to dump memory profile", os.Getpid())
-		profSig := make(chan os.Signal, 1)
-		signal.Notify(profSig, syscall.SIGUSR1)
-		go writeMemProfile(*memprofile, profSig)
-	}
-	if *cpuprofile != "" || *memprofile != "" {
-		fmt.Printf("Note: You must unmount gracefully, otherwise the profile file(s) will stay empty!\n")
 	}
 
 	if *diffDimg == "" && *diffCdimg == "" {
-		fmt.Println("please specify '--diffDimg' or '--diffCdimg'")
-		os.Exit(1)
+		return fmt.Errorf("'--diffDimg' or '--diffCdimg' are not specified")
 	}
 
 	var diffImageFile *image.DimgFile = nil
 	if *diffDimg != "" {
 		diffImageFile, err = image.OpenDimgFile(*diffDimg)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to open diff dimg %s: %v", *diffDimg, err)
 		}
 		defer diffImageFile.Close()
 	} else {
 		diffCdimgFile, err := image.OpenCdimgFile(*diffCdimg)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to open diff cdimg %s: %v", *diffCdimg, err)
 		}
 		defer diffCdimgFile.Close()
 		diffImageFile = diffCdimgFile.Dimg
 	}
 
-	parentNeeded := diffImageFile.Header().ParentId != ""
+	parentNeeded := diffImageFile.DimgHeader().ParentId != ""
 	if parentNeeded && *parentDimg == "" && *parentCdimg == "" {
-		fmt.Println("please specify '--parentDimg' or '--parentCdimg'")
-		os.Exit(1)
+		return fmt.Errorf("'--parentDimg' or '--parentCdimg' are not specified")
 	}
 
 	var parentImageFile *image.DimgFile = nil
 	if *parentDimg != "" {
 		parentImageFile, err = image.OpenDimgFile(*parentDimg)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to open parent dimg %s: %v", *parentDimg, err)
 		}
 		defer parentImageFile.Close()
 	} else {
 		parentCdimgFile, err := image.OpenCdimgFile(*parentCdimg)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to open parent cdimg %s: %v", *parentCdimg, err)
 		}
 		parentImageFile = parentCdimgFile.Dimg
 	}
@@ -174,12 +230,12 @@ func main() {
 
 	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []*image.DimgFile{parentImageFile}, diffImageFile)
 	if err != nil {
-		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
+		return fmt.Errorf("creating Di3fsRoot failed: %v", err)
 	}
 
 	server, err := fs.Mount(flag.Arg(0), di3fsRoot.RootNode, opts)
 	if err != nil {
-		log.Fatalf("Mount fail: %v\n", err)
+		return fmt.Errorf("mount fail: %v", err)
 	}
 	log.Infof("Mounted!")
 	if *bench {
@@ -195,8 +251,16 @@ func main() {
 		metric.AddLabels(utils.ParseLabels([]string{*label}))
 		err = b.AppendResult(metric)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to append benchmark result: %v", err)
+		}
+	}
+	if readyFd != nil {
+		_, err = readyFd.Write([]byte{CHILD_READY})
+		if err != nil {
+			return fmt.Errorf("failed to write readyFd: %v", err)
 		}
 	}
 	server.Wait()
+
+	return nil
 }

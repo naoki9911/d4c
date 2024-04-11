@@ -36,11 +36,14 @@ function convert_image() {
 function diff_image() {
     LOWER=$1
     UPPER=$2
-    if [ -e $IMAGE_DIR/$LOWER-$UPPER.cdimg ]; then
+    DIFF_NAME=$IMAGE_DIR/$LOWER-$UPPER.cdimg
+    if [ -e $DIFF_NAME ]; then
+        echo $DIFF_NAME
         return
     fi
 
-    $BIN_CTR_CLI cdimg diff --oldCdimg $IMAGE_DIR/$LOWER.cdimg --newCdimg $IMAGE_DIR/$UPPER.cdimg --outCdimg $IMAGE_DIR/$LOWER-$UPPER.cdimg --threadNum $THREAD_NUM
+    $BIN_CTR_CLI cdimg diff --oldCdimg $IMAGE_DIR/$LOWER.cdimg --newCdimg $IMAGE_DIR/$UPPER.cdimg --outCdimg $DIFF_NAME --threadNum $THREAD_NUM
+    echo $DIFF_NAME
 }
 
 convert_image 1.23.1
@@ -55,17 +58,17 @@ convert_image 1.25.3
 convert_image 1.25.4
 
 
-diff_image 1.23.1 1.23.2
-diff_image 1.23.2 1.23.3
-diff_image 1.23.3 1.23.4
-diff_image 1.23.4 1.24.0
-diff_image 1.24.0 1.25.0
-diff_image 1.25.0 1.25.1
-diff_image 1.25.1 1.25.2
-diff_image 1.25.2 1.25.3
-diff_image 1.25.3 1.25.4
+MERGED_CDIMGS=$(diff_image 1.23.1 1.23.2)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.2 1.23.3)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.3 1.23.4)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.4 1.24.0)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.24.0 1.25.0)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.0 1.25.1)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.1 1.25.2)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.2 1.25.3)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.3 1.25.4)
 
-$BIN_CTR_CLI cdimg merge --cdimgs $IMAGE_DIR/1.25.3-1.25.4.cdimg,$IMAGE_DIR/1.25.2-1.25.3.cdimg,$IMAGE_DIR/1.25.1-1.25.2.cdimg,$IMAGE_DIR/1.25.0-1.25.1.cdimg,$IMAGE_DIR/1.24.0-1.25.0.cdimg,$IMAGE_DIR/1.23.4-1.24.0.cdimg,$IMAGE_DIR/1.23.3-1.23.4.cdimg,$IMAGE_DIR/1.23.2-1.23.3.cdimg,$IMAGE_DIR/1.23.1-1.23.2.cdimg --outCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect
+$BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect
 rm -rf $IMAGE_DIR/1.25.4-patched
 mkdir $IMAGE_DIR/1.25.4-patched
 

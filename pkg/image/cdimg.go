@@ -42,10 +42,16 @@ type CdimgFile struct {
 	DimgOffset int64
 }
 
-func (cf *CdimgFile) Close() {
+func (cf *CdimgFile) DimgHeader() *DimgHeader {
+	return cf.Dimg.DimgHeader()
+}
+
+func (cf *CdimgFile) Close() error {
 	if cf.Dimg != nil {
 		cf.Dimg.Close()
 	}
+
+	return nil
 }
 
 func (cf *CdimgFile) WriteDimg(writer io.Writer) error {

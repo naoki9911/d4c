@@ -90,6 +90,8 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 	done
 
+	$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER stat compare --fileDimg ./diff_file_$DIFF_NAME.dimg --binaryDimg ./diff_$DIFF_NAME.dimg >> compare.log
+
 	# packing diff data and test it
 	ls -l diff_file_$DIFF_NAME.dimg
 	$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_file_$DIFF_NAME.dimg

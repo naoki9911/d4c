@@ -33,6 +33,7 @@ for TEST in "${TESTS[@]}"; do
 		done
 	done
 	cat $RESULT_DIR/$TEST-benchmark.log >> /tmp/benchmark/benchmark.log
+	cat $RESULT_DIR/$TEST-compare.log >> /tmp/benchmark/compare.log
 done
 
 python3 ./plot_diff.py /tmp/benchmark/benchmark.log /tmp/benchmark/diff.png
@@ -40,3 +41,4 @@ python3 ./plot_pull.py /tmp/benchmark/benchmark.log /tmp/benchmark/pull.png
 python3 ./plot_merge.py /tmp/benchmark/benchmark.log /tmp/benchmark/merge.png
 python3 ./plot_patch.py /tmp/benchmark/benchmark.log /tmp/benchmark/patch.png
 python3 ./plot_file_diff.py /tmp/benchmark/benchmark.log /tmp/benchmark/file_diff.png
+python3 ./plot_file_compare.py /tmp/benchmark/compare.log /tmp/benchmark/file_compare.png

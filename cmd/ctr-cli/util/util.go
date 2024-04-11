@@ -263,7 +263,7 @@ func getDiffCommand() *cli.Command {
 			defer cdimgFile.Close()
 
 			dimg := cdimgFile.Dimg
-			targetFE, err := dimg.Header().FileEntry.Lookup(path)
+			targetFE, err := dimg.DimgHeader().FileEntry.Lookup(path)
 			if err != nil {
 				return fmt.Errorf("failed to lookup %s: %v", path, err)
 			}

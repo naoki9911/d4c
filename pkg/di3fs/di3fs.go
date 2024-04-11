@@ -287,9 +287,9 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 		if baseImages[i] == nil {
 			continue
 		}
-		baseFEs = append(baseFEs, &baseImages[i].Header().FileEntry)
+		baseFEs = append(baseFEs, &baseImages[i].DimgHeader().FileEntry)
 	}
-	rootNode := newNode(&diffImage.Header().FileEntry, baseFEs, nil)
+	rootNode := newNode(&diffImage.DimgHeader().FileEntry, baseFEs, nil)
 	root := Di3fsRoot{
 		baseImageFiles: baseImages,
 		diffImageFile:  diffImage,
@@ -315,10 +315,10 @@ func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 		panic(err)
 	}
 	defer diffImageFile.Close()
-	log.Infof("diffImage %s is loaded", diffImageFile.Header().Id)
+	log.Infof("diffImage %s is loaded", diffImageFile.DimgHeader().Id)
 
 	dimgIdx := 1
-	parentImageId := diffImageFile.Header().ParentId
+	parentImageId := diffImageFile.DimgHeader().ParentId
 	for parentImageId != "" {
 		parentImageFile, err := image.OpenDimgFile(dimgPaths[dimgIdx])
 		if err != nil {
@@ -326,8 +326,8 @@ func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 		}
 		defer parentImageFile.Close()
 		parentImageFiles = append(parentImageFiles, parentImageFile)
-		log.Infof("parentImage %s is loaded", parentImageFile.Header().Id)
-		parentImageId = parentImageFile.Header().ParentId
+		log.Infof("parentImage %s is loaded", parentImageFile.DimgHeader().Id)
+		parentImageId = parentImageFile.DimgHeader().ParentId
 		dimgIdx += 1
 	}
 

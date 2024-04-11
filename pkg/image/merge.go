@@ -529,8 +529,8 @@ type mergeTask struct {
 }
 
 func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *bytes.Buffer, mc MergeConfig) (*FileEntry, error) {
-	lowerEntry := &lowerImgFile.Header().FileEntry
-	upperEntry := &upperImgFile.Header().FileEntry
+	lowerEntry := &lowerImgFile.DimgHeader().FileEntry
+	upperEntry := &upperImgFile.DimgHeader().FileEntry
 
 	mergeTasks := make(chan mergeTask, 1000)
 	writeTasks := make(chan mergeTask, 1000)
@@ -849,9 +849,9 @@ func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, mc MergeConfig) (*
 	}
 
 	header := DimgHeader{
-		Id:              upperImgFile.Header().Id,
-		ParentId:        lowerImgFile.Header().ParentId,
-		CompressionMode: lowerImgFile.Header().CompressionMode,
+		Id:              upperImgFile.DimgHeader().Id,
+		ParentId:        lowerImgFile.DimgHeader().ParentId,
+		CompressionMode: lowerImgFile.DimgHeader().CompressionMode,
 		FileEntry:       *mergedEntry,
 	}
 
@@ -884,9 +884,9 @@ func MergeCdimg(lowerCdimg, upperCdimg string, merged io.Writer, mc MergeConfig)
 	}
 
 	header := DimgHeader{
-		Id:              upperDimg.Header().Id,
-		ParentId:        lowerDimg.Header().ParentId,
-		CompressionMode: upperDimg.Header().CompressionMode,
+		Id:              upperDimg.DimgHeader().Id,
+		ParentId:        lowerDimg.DimgHeader().ParentId,
+		CompressionMode: upperDimg.DimgHeader().CompressionMode,
 		FileEntry:       *mergedEntry,
 	}
 

@@ -69,7 +69,7 @@ func (ds *DimgStore) Walk() error {
 			logger.Infof("%s is invalid dimg file: %v", fPath, err)
 			continue
 		}
-		header := dimgFile.Header()
+		header := dimgFile.DimgHeader()
 
 		entry := &DimgEntry{
 			DimgHeader: *header,
@@ -91,7 +91,7 @@ func (ds *DimgStore) AddDimg(dimgPath string, configBytes ...[]byte) error {
 		return fmt.Errorf("failed to open dimg %s: %v", dimgPath, err)
 	}
 
-	header := dimgFile.Header()
+	header := dimgFile.DimgHeader()
 	fPath := filepath.Join(ds.storeDir, fmt.Sprintf("%s.dimg", string(header.Digest())))
 	err = os.Rename(dimgPath, fPath)
 	if err != nil {

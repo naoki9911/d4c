@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -130,7 +131,7 @@ func dimgAction(c *cli.Context) error {
 			}
 			defer dimgFile.Close()
 			dimgEntry = append(dimgEntry, &image.DimgEntry{
-				DimgHeader: *dimgFile.Header(),
+				DimgHeader: *dimgFile.DimgHeader(),
 				Path:       path,
 			})
 		}
@@ -224,7 +225,7 @@ func CdimgCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:     "cdimgs",
-				Usage:    "path to merged cdimgs. path is ordered in upper to lower form (upperN, upperN-1, upperN-2, .. upper0)",
+				Usage:    "path to merged cdimgs. path is ordered in lower to upper form",
 				Value:    "",
 				Required: false,
 			},
@@ -309,10 +310,13 @@ func cdimgAction(c *cli.Context) error {
 			}
 			defer cdimgFile.Close()
 			dimgEntry = append(dimgEntry, &image.DimgEntry{
-				DimgHeader: *cdimgFile.Dimg.Header(),
+				DimgHeader: *cdimgFile.Dimg.DimgHeader(),
 				Path:       path,
 			})
 		}
+		// reverse entries into upperN, upperN-1, ..., lower
+		slices.Reverse(dimgEntry)
+
 		start = time.Now()
 		tmpDir := filepath.Join("/tmp/d4c", utils.GetRandomId("merge-tmp"))
 		err = os.MkdirAll(tmpDir, 0755)
@@ -336,6 +340,7 @@ func cdimgAction(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to rename %s to %s: %v", mergedDimg.Path, outCdimg, err)
 		}
+		header = &mergedDimg.DimgHeader
 	} else {
 		mergeFile, err := os.Create(outCdimg)
 		if err != nil {

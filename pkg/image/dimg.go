@@ -34,6 +34,8 @@ type DimgFile struct {
 	bodyOffset int64
 }
 
+var _ ImageFile = (*DimgFile)(nil)
+
 func OpenDimgFile(path string) (*DimgFile, error) {
 	imageFile, err := os.Open(path)
 	if err != nil {
@@ -78,7 +80,7 @@ func LoadDimgHeader(reader io.Reader) (*DimgHeader, int64, error) {
 	return header, curOffset, nil
 }
 
-func (df *DimgFile) Header() *DimgHeader {
+func (df *DimgFile) DimgHeader() *DimgHeader {
 	return df.header
 }
 

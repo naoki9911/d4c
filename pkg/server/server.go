@@ -146,9 +146,9 @@ func (ds *DiffServer) handlePostDiffData(w http.ResponseWriter, r *http.Request)
 
 	ds.lock.Lock()
 	ds.imageTags[diffData.ImageTag.String()] = diffImage{
-		dimgId: cdimgFile.Dimg.Header().Id,
+		dimgId: cdimgFile.Dimg.DimgHeader().Id,
 	}
-	logger.Infof("successfully registered ImageTag %s (Id=%s)", diffData.ImageTag.String(), cdimgFile.Dimg.Header().Id)
+	logger.Infof("successfully registered ImageTag %s (Id=%s)", diffData.ImageTag.String(), cdimgFile.Dimg.DimgHeader().Id)
 	ds.lock.Unlock()
 
 	w.WriteHeader(http.StatusOK)
