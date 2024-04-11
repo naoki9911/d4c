@@ -119,11 +119,11 @@ func Action(c *cli.Context) error {
 	os.RemoveAll(workDir)
 	err := os.MkdirAll(workDir, 0755)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to mkdir %s: %v", workDir, err)
 	}
 	err = os.MkdirAll(outputPath, 0755)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to mkdir %s: %v", outputPath, err)
 	}
 
 	logger.Infof("pulling image %q", image)

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/convert"
+	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/convert2"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/diff"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/load"
 	"github.com/naoki9911/fuse-diff-containerd/cmd/ctr-cli/merge"
@@ -43,6 +44,7 @@ func NewApp() *cli.App {
 	}
 	app.Commands = []*cli.Command{
 		convert.Command(),
+		convert2.Command(),
 		dimgCommand(),
 		cdimgCommand(),
 		pack.Command(),

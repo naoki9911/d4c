@@ -26,11 +26,17 @@ function convert_image() {
     if [ -e $IMAGE_DIR/$IMAGE_VERSION.cdimg ]; then
         return
     fi
-    $BIN_CTR_CLI convert --image nginx:$IMAGE_VERSION --output $IMAGE_DIR/$IMAGE_VERSION --cdimg --excludes /dev --threadNum $THREAD_NUM
+    $BIN_CTR_CLI convert --image nginx:$IMAGE_VERSION --output $IMAGE_DIR/$IMAGE_VERSION --cdimg --threadNum $THREAD_NUM
     mv $IMAGE_DIR/$IMAGE_VERSION/image.cdimg $IMAGE_DIR/$IMAGE_VERSION.cdimg
     mkdir $IMAGE_DIR/image-$IMAGE_VERSION
     tar -xf $IMAGE_DIR/$IMAGE_VERSION/layer.tar -C $IMAGE_DIR/image-$IMAGE_VERSION
-    rm -rf $IMAGE_DIR/image-$IMAGE_VERSION/dev
+    cd $IMAGE_DIR/image-$IMAGE_VERSION
+    rm -f $(find -name .wh..wh..opq)
+    rm -f $(find . -type b)
+    rm -f $(find . -type c)
+    rm -f $(find . -type p)
+    rm -f $(find . -type s)
+    cd ../../
 }
 
 function diff_image() {

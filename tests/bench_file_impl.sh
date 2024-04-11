@@ -37,10 +37,16 @@ for ((i=0; i < ${#IMAGE_VERSIONS[@]}; i++));do
 		echo "base image for $IMAGE_NAME:$IMAGE already exists"
 	else
 		echo "Creating base image for $IMAGE_NAME:$IMAGE"
-		$BIN_CTR_CLI convert --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --excludes /dev --threadNum 8
+		$BIN_CTR_CLI convert --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --threadNum 8
 		mkdir $IMAGE
 		tar -xf ./image-$IMAGE/layer.tar -C ./$IMAGE
-		rm -rf ./$IMAGE/dev
+		cd $IMAGE
+		rm -f $(find -name .wh..wh..opq)
+        rm -f $(find . -type b)
+        rm -f $(find . -type c)
+        rm -f $(find . -type p)
+        rm -f $(find . -type s)
+		cd ../
 
 		mv ./image-$IMAGE/image.dimg $IMAGE.dimg
 		$BIN_CTR_CLI dimg patch --outDir=./$IMAGE-base-patched --diffDimg=./$IMAGE.dimg

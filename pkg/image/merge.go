@@ -752,7 +752,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 	for upperfName := range upperEntry.Childs {
 		upperChild := upperEntry.Childs[upperfName]
 		switch upperChild.Type {
-		case FILE_ENTRY_DIR_NEW, FILE_ENTRY_FILE_NEW, FILE_ENTRY_SYMLINK, FILE_ENTRY_OPAQUE:
+		case FILE_ENTRY_DIR_NEW, FILE_ENTRY_FILE_NEW, FILE_ENTRY_SYMLINK, FILE_ENTRY_HARDLINK:
 			log.Debugf("upperChild is new")
 			if upperChild.IsDir() {
 				err := enqueueMergeTaskToQueue(nil, upperChild, taskChan)
@@ -774,10 +774,10 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 				return fmt.Errorf("upperChild is %s but lowerChild(%s) not found: %v", EntryTypeToString(upperChild.Type), upperfName, upperChild.Childs)
 			}
 
-			// When the lower has SYMLINK or OPAQUE, the upper must have 'New' entries
+			// When the lower has SYMLINK, the upper must have 'New' entries
 			// Such files must be processed above case.
-			if lowerChild.Type == FILE_ENTRY_SYMLINK || lowerChild.Type == FILE_ENTRY_OPAQUE {
-				return fmt.Errorf("lowerChild is symlink or opaque")
+			if lowerChild.IsLink() {
+				return fmt.Errorf("lowerChild is symlink or hardlink")
 			}
 
 			switch upperChild.Type {

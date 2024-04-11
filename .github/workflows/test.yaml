@@ -172,6 +172,27 @@ jobs:
       - name: run test_merge.sh
         run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/test_merge.sh"
 
+  test-convert:
+    runs-on: ubuntu-22.04
+    needs: sync
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup lxd
+        run: ./tests/setup_lxd.sh
+      - uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+         key: lxc-image-${{ github.sha }}
+         path: /tmp/test-image.tar.zst
+         fail-on-cache-miss: true
+      - name: load lxc image
+        run: sudo lxc image import /tmp/test-image.tar.zst --alias test-export
+      - name: launch lxc container
+        run: ./tests/launch_test_lxc.sh test-export
+      - name: run test_merge.sh
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && sudo /home/ubuntu/d4c/tests/test_convert.sh"
+
   benchmark-all:
     runs-on: ubuntu-22.04
     needs: sync

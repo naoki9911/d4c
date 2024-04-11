@@ -101,6 +101,26 @@ func compressWithZstd(src []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+func compressWithZstdIo(src io.Reader) (*bytes.Buffer, error) {
+	out := &bytes.Buffer{}
+	z, err := zstd.NewWriter(out)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = io.Copy(z, src)
+	if err != nil {
+		return nil, err
+	}
+
+	err = z.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
 func packBytes(b []byte, out *bytes.Buffer) (int64, error) {
 	compressed, err := compressWithZstd(b)
 	if err != nil {

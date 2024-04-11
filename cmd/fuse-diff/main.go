@@ -188,19 +188,23 @@ func runMain(isChild bool, readyFd *os.File) error {
 		return fmt.Errorf("'--parentDimg' or '--parentCdimg' are not specified")
 	}
 
-	var parentImageFile *image.DimgFile = nil
-	if *parentDimg != "" {
-		parentImageFile, err = image.OpenDimgFile(*parentDimg)
-		if err != nil {
-			return fmt.Errorf("failed to open parent dimg %s: %v", *parentDimg, err)
+	parentImages := []*image.DimgFile{}
+	if parentNeeded {
+		var parentImageFile *image.DimgFile
+		if *parentDimg != "" {
+			parentImageFile, err = image.OpenDimgFile(*parentDimg)
+			if err != nil {
+				return fmt.Errorf("failed to open parent dimg %s: %v", *parentDimg, err)
+			}
+			defer parentImageFile.Close()
+		} else {
+			parentCdimgFile, err := image.OpenCdimgFile(*parentCdimg)
+			if err != nil {
+				return fmt.Errorf("failed to open parent cdimg %s: %v", *parentCdimg, err)
+			}
+			parentImageFile = parentCdimgFile.Dimg
 		}
-		defer parentImageFile.Close()
-	} else {
-		parentCdimgFile, err := image.OpenCdimgFile(*parentCdimg)
-		if err != nil {
-			return fmt.Errorf("failed to open parent cdimg %s: %v", *parentCdimg, err)
-		}
-		parentImageFile = parentCdimgFile.Dimg
+		parentImages = append(parentImages, parentImageFile)
 	}
 
 	sec := time.Second
@@ -228,7 +232,7 @@ func runMain(isChild bool, readyFd *os.File) error {
 	// Leave file permissions on "000" files as-is
 	opts.NullPermissions = true
 
-	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, []*image.DimgFile{parentImageFile}, diffImageFile)
+	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, parentImages, diffImageFile)
 	if err != nil {
 		return fmt.Errorf("creating Di3fsRoot failed: %v", err)
 	}

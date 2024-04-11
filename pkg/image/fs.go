@@ -21,7 +21,7 @@ const (
 	FILE_ENTRY_DIR
 	FILE_ENTRY_DIR_NEW
 	FILE_ENTRY_SYMLINK
-	FILE_ENTRY_OPAQUE
+	FILE_ENTRY_HARDLINK
 )
 
 func EntryTypeToString(e EntryType) string {
@@ -38,8 +38,8 @@ func EntryTypeToString(e EntryType) string {
 		return "dir_new"
 	case FILE_ENTRY_SYMLINK:
 		return "symlink"
-	case FILE_ENTRY_OPAQUE:
-		return "opaque"
+	case FILE_ENTRY_HARDLINK:
+		return "hardlink"
 	default:
 		panic(fmt.Errorf("unexpected EntryType: %v", e))
 	}
@@ -74,7 +74,6 @@ type FileEntry struct {
 	UID            uint32                `json:"uid"`
 	GID            uint32                `json:"gid"`
 	Type           EntryType             `json:"type"`
-	OaqueFiles     []string              `json:"opaqueFiles,omitempty"`
 	UncompressedGz bool                  `json:"uncompressedGz"`
 	RealPath       string                `json:"realPath,omitempty"`
 	Childs         map[string]*FileEntry `json:"childs"`
@@ -130,16 +129,21 @@ func (fe FileEntry) IsDir() bool {
 func (fe FileEntry) IsNew() bool {
 	return fe.Type == FILE_ENTRY_FILE_NEW ||
 		fe.Type == FILE_ENTRY_DIR_NEW ||
-		fe.Type == FILE_ENTRY_OPAQUE ||
-		fe.Type == FILE_ENTRY_SYMLINK
+		fe.Type == FILE_ENTRY_SYMLINK ||
+		fe.Type == FILE_ENTRY_HARDLINK
 }
 
 func (fe FileEntry) IsSame() bool {
 	return fe.Type == FILE_ENTRY_FILE_SAME
 }
 
-func (fe FileEntry) IsSymlink() bool {
+func (fe FileEntry) IsLink() bool {
 	return fe.Type == FILE_ENTRY_SYMLINK
+}
+
+func (fe FileEntry) IsBaseRequired() bool {
+	return fe.Type == FILE_ENTRY_FILE_DIFF ||
+		fe.Type == FILE_ENTRY_FILE_SAME
 }
 
 func (fe FileEntry) HasBody() bool {

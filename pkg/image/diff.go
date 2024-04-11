@@ -24,6 +24,16 @@ func getFileSize(path string) (int, error) {
 	return int(fileInfo.Size()), nil
 }
 
+func readFileAll(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return io.ReadAll(file)
+}
+
 func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffConfig) error {
 	oldDimg, err := OpenDimgFile(oldDimgPath)
 	if err != nil {
@@ -419,8 +429,7 @@ func enqueueDiffTaskToQueue(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEnt
 			return fmt.Errorf("invalid dimg")
 		}
 
-		if newChildEntry.Type == FILE_ENTRY_OPAQUE ||
-			newChildEntry.Type == FILE_ENTRY_SYMLINK ||
+		if newChildEntry.IsLink() ||
 			newChildEntry.Size == 0 {
 			continue
 		}

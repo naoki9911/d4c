@@ -1,73 +1,56 @@
 package image
 
 import (
+	"archive/tar"
 	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 )
-
-func compressFileWithZstd(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	fileBytes, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := CompressWithZstd(fileBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
-
-}
-
-func packFile(srcFilePath string, out io.Writer) (int64, error) {
-	compressed, err := compressFileWithZstd(srcFilePath)
-	if err != nil {
-		return 0, err
-	}
-	writtenSize, err := out.Write(compressed)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(writtenSize), err
-}
 
 type packTask struct {
 	entry *FileEntry
-	path  string
 	data  *bytes.Buffer
 }
 
-func packDirImplMultithread(dirPath string, outDirEntry *FileEntry, outBody *bytes.Buffer, threadNum int) error {
+func packDirImplMultithread(dirPath string, layer v1.Layer, outDirEntry *FileEntry, outBody *bytes.Buffer, threadNum int) error {
 	compressTasks := make(chan packTask, 1000)
 	writeTasks := make(chan packTask, 1000)
 	wg := sync.WaitGroup{}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		logger.Info("started pack enqueu thread")
-		err := enqueuePackTaskToChannel(dirPath, outDirEntry, compressTasks)
-		if err != nil {
-			logger.Errorf("failed to enque: %v", err)
-		}
-		close(compressTasks)
-		logger.Info("finished pack enqueu thread")
-	}()
+	if layer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Info("started pack enqueu thread")
+			err := enqueuePackTaskToChannelFromLayer(layer, outDirEntry, compressTasks)
+			if err != nil {
+				logger.Errorf("failed to enque: %v", err)
+			}
+			close(compressTasks)
+			logger.Info("finished pack enqueu thread")
+		}()
+	} else {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Info("started pack enqueu thread")
+			err := enqueuePackTaskToChannel(dirPath, outDirEntry, compressTasks)
+			if err != nil {
+				logger.Errorf("failed to enque: %v", err)
+			}
+			close(compressTasks)
+			logger.Info("finished pack enqueu thread")
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
@@ -101,15 +84,14 @@ func packDirImplMultithread(dirPath string, outDirEntry *FileEntry, outBody *byt
 				if !more {
 					break
 				}
-				outBuffer := bytes.Buffer{}
-				writtenSize, err := packFile(ct.path, &outBuffer)
+				outBuffer, err := compressWithZstdIo(ct.data)
 				if err != nil {
-					logger.Errorf("failed to pack file %s: %v", ct.path, err)
+					logger.Errorf("failed to pack file %s: %v", ct.entry.Name, err)
 					break
 				}
-				ct.entry.CompressedSize = writtenSize
+				ct.entry.CompressedSize = int64(outBuffer.Len())
 				ct.entry.Type = FILE_ENTRY_FILE_NEW
-				ct.data = &outBuffer
+				ct.data = outBuffer
 				writeTasks <- ct
 			}
 			logger.Infof("finished pack compress thread idx=%d", threadId)
@@ -134,7 +116,6 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 	}
 
 	childDirs := []fs.DirEntry{}
-	isOpaqueDir := false
 	for i, entry := range dirEntries {
 		fName := entry.Name()
 		dirFilePath := path.Join(dirPath, fName)
@@ -149,13 +130,11 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 			return err
 		}
 
-		// opaque directory
-		// https://www.madebymikal.com/interpreting-whiteout-files-in-docker-image-layers/
-		// AUFS provided an “opaque directory” that ensured that the directory remained, but all of its previous content was hidden.
-		// TODO check filemode
-		// https://www.kernel.org/doc/html/latest/filesystems/overlayfs.html#whiteouts-and-opaque-directories
-		if fName == ".wh..wh..opq" {
-			isOpaqueDir = true
+		// ignore 'char', 'fifo', 'socket' and whiteout file
+		if fileInfo.Mode()&os.ModeCharDevice == os.ModeCharDevice ||
+			fileInfo.Mode()&os.ModeNamedPipe == os.ModeNamedPipe ||
+			fileInfo.Mode()&os.ModeSocket == os.ModeSocket ||
+			fName == ".wh..wh..opq" {
 			continue
 		}
 
@@ -176,15 +155,6 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 			continue
 		}
 
-		if fileInfo.Mode()&os.ModeCharDevice == os.ModeCharDevice {
-			logger.Infof("Ignore char device:%v\n", dirFilePath)
-			continue
-		}
-		if fileInfo.Mode()&os.ModeNamedPipe == os.ModeNamedPipe {
-			logger.Infof("Ignore named pipe:%v\n", dirFilePath)
-			continue
-		}
-
 		err = entry.SetUGID(dirFilePath)
 		if err != nil {
 			return err
@@ -195,18 +165,18 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 			return err
 		}
 
+		fileBody, err := readFileAll(dirFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %v", dirFilePath, err)
+		}
+
 		parentEntry.Childs[fName] = entry
 		taskChan <- packTask{
 			entry: entry,
-			path:  dirFilePath,
-			data:  nil,
+			data:  bytes.NewBuffer(fileBody),
 		}
 	}
 
-	opaqueFiles := []string{}
-	if isOpaqueDir {
-		opaqueFiles = append(opaqueFiles, ".wh..wh..opq")
-	}
 	for _, childDir := range childDirs {
 		childDirPath := path.Join(dirPath, childDir.Name())
 		entry := &FileEntry{
@@ -231,7 +201,82 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 	}
 
 	parentEntry.Type = FILE_ENTRY_DIR_NEW
-	parentEntry.OaqueFiles = opaqueFiles
+	return nil
+}
+
+func enqueuePackTaskToChannelFromLayer(layer v1.Layer, rootEntry *FileEntry, taskChan chan packTask) error {
+	uncomp, err := layer.Uncompressed()
+	if err != nil {
+		return fmt.Errorf("failed to get uncompressed layer: %v", err)
+	}
+	tarReader := tar.NewReader(uncomp)
+
+	// key is directory path
+	files := map[string]*FileEntry{}
+	rootEntry.Type = FILE_ENTRY_DIR_NEW
+	files["."] = rootEntry
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read next header: %v", err)
+		}
+
+		dirname := filepath.Dir(header.Name)
+		basename := filepath.Base(header.Name)
+		logger.WithFields(logrus.Fields{"dirname": dirname, "basename": basename}).Debugf("pack %s", header.Name)
+
+		dirEntry, ok := files[dirname]
+		if !ok {
+			return fmt.Errorf("directory %s not found", dirname)
+		}
+		entry := &FileEntry{
+			Name: basename,
+			Mode: uint32(header.Mode),
+			Size: int(header.Size),
+			UID:  uint32(header.Uid),
+			GID:  uint32(header.Gid),
+		}
+		switch header.Typeflag {
+		case tar.TypeDir:
+			entry.Type = FILE_ENTRY_DIR_NEW
+			entry.Childs = map[string]*FileEntry{}
+			dirEntry.Childs[basename] = entry
+			files[header.Name] = entry
+		case tar.TypeReg:
+			entry.Type = FILE_ENTRY_FILE_NEW
+			if entry.Size != 0 {
+				data := bytes.Buffer{}
+				_, err = io.Copy(&data, tarReader)
+				if err != nil {
+					return fmt.Errorf("failed to copy %s: %v", header.Name, err)
+				}
+				taskChan <- packTask{
+					entry: entry,
+					data:  &data,
+				}
+			}
+			dirEntry.Childs[basename] = entry
+			files[header.Name] = entry
+		case tar.TypeSymlink:
+			entry.Type = FILE_ENTRY_SYMLINK
+			entry.RealPath = header.Linkname
+			dirEntry.Childs[basename] = entry
+			files[header.Name] = entry
+		case tar.TypeLink:
+			entry.Type = FILE_ENTRY_HARDLINK
+			entry.RealPath = header.Linkname
+			dirEntry.Childs[basename] = entry
+			files[header.Name] = entry
+		case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
+			continue
+		default:
+			return fmt.Errorf("file %s has unexpected type flag: %d", header.Name, header.Typeflag)
+		}
+	}
 	return nil
 }
 
@@ -247,7 +292,40 @@ func PackDir(dirPath, outDimgPath string, threadNum int) error {
 	defer outDimg.Close()
 
 	outBody := bytes.Buffer{}
-	err = packDirImplMultithread(dirPath, entry, &outBody, threadNum)
+	err = packDirImplMultithread(dirPath, nil, entry, &outBody, threadNum)
+	if err != nil {
+		return err
+	}
+	//jsonBytes, _ := json.MarshalIndent(entry, " ", " ")
+	//fmt.Println(string(jsonBytes))
+	bodyDigest := digest.FromBytes(outBody.Bytes())
+
+	header := DimgHeader{
+		Id:        bodyDigest,
+		ParentId:  digest.Digest(""),
+		FileEntry: *entry,
+	}
+
+	err = WriteDimg(outDimg, &header, &outBody)
+	if err != nil {
+		return fmt.Errorf("faield to write dimg: %v", err)
+	}
+	return nil
+}
+
+func PackLayer(layer v1.Layer, outDimgPath string, threadNum int) error {
+	entry := &FileEntry{
+		Name:   "/",
+		Childs: map[string]*FileEntry{},
+	}
+	outDimg, err := os.Create(outDimgPath)
+	if err != nil {
+		return err
+	}
+	defer outDimg.Close()
+
+	outBody := bytes.Buffer{}
+	err = packDirImplMultithread("", layer, entry, &outBody, threadNum)
 	if err != nil {
 		return err
 	}

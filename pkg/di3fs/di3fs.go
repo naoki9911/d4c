@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -22,6 +22,8 @@ type Di3fsNodeID uint64
 type Di3fsNode struct {
 	fs.Inode
 
+	path     string
+	linkNum  uint32
 	meta     *image.FileEntry
 	baseMeta []*image.FileEntry
 	data     []byte
@@ -39,7 +41,7 @@ func (dn *Di3fsNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.Att
 	defer log.Traceln("Getattr finished")
 
 	out.Mode = dn.meta.Mode & 0777
-	out.Nlink = 1
+	out.Nlink = dn.linkNum
 	out.Mtime = uint64(time.Now().Unix())
 	out.Atime = out.Mtime
 	out.Ctime = out.Mtime
@@ -58,9 +60,6 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 		baseMeta := dn.baseMeta[i]
 		baseImageOffset := dn.baseMeta[i].Offset
 		baseImageFile := dn.root.baseImageFiles[i]
-		if baseMeta.Type == image.FILE_ENTRY_OPAQUE {
-			return nil, nil
-		}
 		if baseMeta.IsSame() {
 			continue
 		}
@@ -135,8 +134,6 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 			return 0, 0, syscall.EIO
 		}
 		dn.data = data
-	} else if dn.meta.Type == image.FILE_ENTRY_OPAQUE {
-		dn.data = []byte{}
 	} else {
 		var patchReader io.Reader
 		patchBytes := make([]byte, dn.meta.CompressedSize)
@@ -192,19 +189,6 @@ func (dn *Di3fsNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	return []byte(dn.meta.RealPath), 0
 }
 
-func generateOpaqueFileEntry(dir *image.FileEntry) (*image.FileEntry, error) {
-	fe := &image.FileEntry{
-		Name:     ".wh..wh..opq",
-		Size:     int(0),
-		Mode:     uint32(dir.Mode),
-		Type:     image.FILE_ENTRY_OPAQUE,
-		RealPath: "",
-		Childs:   map[string]*image.FileEntry{},
-	}
-
-	return fe, nil
-}
-
 func (dn *Di3fsNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	log.Traceln("Readdir started")
 	defer log.Traceln("Readdir finished")
@@ -217,30 +201,16 @@ func (dn *Di3fsNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) 
 	}
 	return fs.NewListDirStream(r), 0
 }
+
 func (dr *Di3fsNode) OnAdd(ctx context.Context) {
 	log.Traceln("OnAdd started")
 	defer log.Traceln("OnAdd finished")
 
-	if dr.root.IsBase() && !dr.meta.IsDir() && !dr.meta.IsSymlink() && !dr.meta.IsNew() {
+	if dr.root.IsBase() && dr.meta.IsBaseRequired() {
 		log.Fatalf("invalid base image")
 	}
 	// here, rootNode is initialized
 	//log.Debugf("base=%s patch=%s", dr.basePath, dr.patchPath)
-	if dr.meta.IsDir() {
-		for _, o := range dr.meta.OaqueFiles {
-			if strings.Contains(o, "/") {
-				continue
-			}
-			fe, err := generateOpaqueFileEntry(dr.meta)
-			if err != nil {
-				log.Fatalf("failed to generate opaqueFileEntry: %v", err)
-			}
-			n := newNode(fe, nil, dr.root)
-			stableAttr := fs.StableAttr{}
-			cNode := dr.NewPersistentInode(ctx, n, stableAttr)
-			dr.AddChild(n.meta.Name, cNode, false)
-		}
-	}
 	for childfName := range dr.meta.Childs {
 		c := dr.meta.Childs[childfName]
 		var childBaseFEs = make([]*image.FileEntry, 0)
@@ -251,21 +221,56 @@ func (dr *Di3fsNode) OnAdd(ctx context.Context) {
 			}
 		}
 		n := newNode(c, childBaseFEs, dr.root)
+		n.path = filepath.Join(dr.path, childfName)
 		stableAttr := fs.StableAttr{}
 		if c.IsDir() {
 			stableAttr.Mode = fuse.S_IFDIR
-		} else if c.IsSymlink() {
+		} else if c.Type == image.FILE_ENTRY_SYMLINK {
 			stableAttr.Mode = fuse.S_IFLNK
+		} else if c.Type == image.FILE_ENTRY_HARDLINK {
+			hn := &hardlinkNode{
+				parent: dr,
+				entry:  c,
+			}
+			dr.root.hardlinks = append(dr.root.hardlinks, hn)
+			continue
 		}
 		cNode := dr.NewPersistentInode(ctx, n, stableAttr)
 		dr.AddChild(n.meta.Name, cNode, false)
+
+		dr.root.nodes[n.path] = n
+		dr.root.inodes[n.path] = cNode
 	}
+
+	// process hardlink
+	if dr == dr.root.RootNode {
+		for _, h := range dr.root.hardlinks {
+			targetInode, ok := dr.root.inodes[h.entry.RealPath]
+			if !ok {
+				log.Fatalf("inode for %s does not exist", h.entry.RealPath)
+			}
+			targetNode, ok := dr.root.nodes[h.entry.RealPath]
+			if !ok {
+				log.Fatalf("node for %s does not exist", h.entry.RealPath)
+			}
+			targetNode.linkNum += 1
+			h.parent.AddChild(h.entry.Name, targetInode, false)
+		}
+	}
+}
+
+type hardlinkNode struct {
+	parent *Di3fsNode
+	entry  *image.FileEntry
 }
 
 type Di3fsRoot struct {
 	baseImageFiles []*image.DimgFile
 	diffImageFile  *image.DimgFile
 	RootNode       *Di3fsNode
+	inodes         map[string]*fs.Inode
+	nodes          map[string]*Di3fsNode
+	hardlinks      []*hardlinkNode
 }
 
 func (dr *Di3fsRoot) IsBase() bool {
@@ -274,6 +279,7 @@ func (dr *Di3fsRoot) IsBase() bool {
 
 func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *Di3fsNode {
 	node := &Di3fsNode{
+		linkNum:  1,
 		meta:     fe,
 		baseMeta: baseFE,
 		root:     root,
@@ -294,6 +300,9 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 		baseImageFiles: baseImages,
 		diffImageFile:  diffImage,
 		RootNode:       rootNode,
+		inodes:         map[string]*fs.Inode{},
+		nodes:          map[string]*Di3fsNode{},
+		hardlinks:      []*hardlinkNode{},
 	}
 	rootNode.root = &root
 
