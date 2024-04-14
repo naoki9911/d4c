@@ -115,21 +115,21 @@ func ReadPatch(r io.Reader) (io.Reader, uint64, CompressionMode, error) {
 	return reader, newLen, compMode, nil
 }
 
-func Diff(oldReader, newReader io.Reader, newSize int64, patchWriter io.Writer, mode CompressionMode) error {
-	writer, err := WritePatch(patchWriter, uint64(newSize), mode)
+func Diff(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode) error {
+	writer, err := WritePatch(patchWriter, uint64(len(newBytes)), mode)
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
 
-	return diff.Diff(oldReader, newReader, writer)
+	return diff.Diff(oldBytes, newBytes, writer)
 }
 
-func Patch(oldReader io.Reader, newWriter io.Writer, patchReader io.Reader) error {
+func Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {
 	reader, newLen, _, err := ReadPatch(patchReader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return patch.Patch(oldReader, newWriter, reader, newLen)
+	return patch.Patch(oldBytes, reader, newLen)
 }

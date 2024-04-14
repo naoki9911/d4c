@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
@@ -71,16 +72,20 @@ func diffCommand() *cli.Command {
 				return err
 			}
 			defer oldFile.Close()
+			oldBytes, err := io.ReadAll(oldFile)
+			if err != nil {
+				return err
+			}
 			newFile, err := os.Open(newFilePath)
 			if err != nil {
 				return err
 			}
-			defer newFile.Close()
-			newFileStat, err := newFile.Stat()
+			newBytes, err := io.ReadAll(newFile)
 			if err != nil {
 				return err
 			}
-			err = bsdiffx.Diff(oldFile, newFile, newFileStat.Size(), diffFile, compMode)
+			defer newFile.Close()
+			err = bsdiffx.Diff(oldBytes, newBytes, diffFile, compMode)
 			if err != nil {
 				return err
 			}
@@ -124,17 +129,7 @@ func patchCommand() *cli.Command {
 			}
 			defer diffFile.Close()
 
-			oldFile, err := os.Open(oldFilePath)
-			if err != nil {
-				return err
-			}
-			defer oldFile.Close()
-			newFile, err := os.Create(newFilePath)
-			if err != nil {
-				return err
-			}
-			defer newFile.Close()
-			err = bsdiffx.Patch(oldFile, newFile, diffFile)
+			err = image.ApplyFilePatch(oldFilePath, newFilePath, diffFile)
 			if err != nil {
 				return err
 			}

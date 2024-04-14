@@ -2,7 +2,6 @@ package image
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +13,7 @@ import (
 	cp "github.com/otiai10/copy"
 )
 
-func applyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
+func ApplyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 	//fmt.Println(newFilePath)
 	baseFile, err := os.Open(baseFilePath)
 	if err != nil {
@@ -26,7 +25,17 @@ func applyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 		return err
 	}
 	defer newFile.Close()
-	err = bsdiffx.Patch(baseFile, newFile, patch)
+
+	baseBytes, err := io.ReadAll(baseFile)
+	if err != nil {
+		return err
+	}
+	newBytes, err := bsdiffx.Patch(baseBytes, patch)
+	if err != nil {
+		return err
+	}
+
+	_, err = newFile.Write(newBytes)
 	if err != nil {
 		return err
 	}
@@ -34,27 +43,27 @@ func applyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 	return nil
 }
 
-func applyFilePatchForGz(baseFilePath, newFilePath string, patch io.Reader) error {
-	baseFile, err := os.Open(baseFilePath)
-	if err != nil {
-		return err
-	}
-	defer baseFile.Close()
-	newFile, err := os.Create(newFilePath)
-	if err != nil {
-		return err
-	}
-	defer newFile.Close()
-
-	gzipNewWriter := gzip.NewWriter(newFile)
-	defer gzipNewWriter.Close()
-	err = bsdiffx.Patch(baseFile, gzipNewWriter, patch)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
+//func applyFilePatchForGz(baseFilePath, newFilePath string, patch io.Reader) error {
+//	baseFile, err := os.Open(baseFilePath)
+//	if err != nil {
+//		return err
+//	}
+//	defer baseFile.Close()
+//	newFile, err := os.Create(newFilePath)
+//	if err != nil {
+//		return err
+//	}
+//	defer newFile.Close()
+//
+//	gzipNewWriter := gzip.NewWriter(newFile)
+//	defer gzipNewWriter.Close()
+//	err = bsdiffx.Patch(baseFile, gzipNewWriter, patch)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
 
 func ApplyPatch(basePath, newPath string, dirEntry *FileEntry, img *DimgFile, isBase bool) error {
 	hardlinks, err := applyPatchImpl(basePath, newPath, dirEntry, img, isBase)
@@ -166,16 +175,9 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 			return nil, err
 		}
 		patchReader = bytes.NewBuffer(patchBytes)
-		if dirEntry.UncompressedGz {
-			err := applyFilePatchForGz(baseFilePath, newFilePath, patchReader)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			err := applyFilePatch(baseFilePath, newFilePath, patchReader)
-			if err != nil {
-				return nil, err
-			}
+		err = ApplyFilePatch(baseFilePath, newFilePath, patchReader)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		return nil, fmt.Errorf("unexpected error type=%v", dirEntry.Type)

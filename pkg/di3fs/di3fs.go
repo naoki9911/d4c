@@ -90,14 +90,12 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 					return nil, err
 				}
 				patchReader := bytes.NewBuffer(patchBytes)
-				baseReader := bytes.NewBuffer(data)
 
-				writer := new(bytes.Buffer)
-				err = bsdiffx.Patch(baseReader, writer, patchReader)
+				newBytes, err := bsdiffx.Patch(data, patchReader)
 				if err != nil {
 					return nil, err
 				}
-				data = writer.Bytes()
+				data = newBytes
 			}
 			return data, nil
 		}
@@ -149,15 +147,12 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 			return 0, 0, syscall.EIO
 		}
 
-		baseReader := bytes.NewBuffer(baseData)
-
-		writer := new(bytes.Buffer)
-		err = bsdiffx.Patch(baseReader, writer, patchReader)
+		newBytes, err := bsdiffx.Patch(baseData, patchReader)
 		if err != nil {
 			log.Errorf("Open failed(bsdiff) err=%v", err)
 			return 0, 0, syscall.EIO
 		}
-		dn.data = writer.Bytes()
+		dn.data = newBytes
 		log.Debugf("Successfully patched %s", dn.meta.Name)
 	}
 	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0

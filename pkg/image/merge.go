@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
@@ -613,14 +612,13 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 								logger.Errorf("merge thread: %v", gErr)
 								return
 							}
-							baseReader, err := zstd.NewReader(bytes.NewBuffer(lowerBytes))
+							baseBytes, err := utils.DecompressWithZstd(lowerBytes)
 							if err != nil {
-								gErr = fmt.Errorf("failed to read lowerImg via zstdReader: %v", err)
+								gErr = fmt.Errorf("failed to decompress lowerImg: %v", err)
 								cancel()
 								logger.Errorf("merge thread: %v", gErr)
 								return
 							}
-							defer baseReader.Close()
 
 							_, err = upperImgFile.ReadAt(upperBytes, mt.upperEntry.Offset)
 							if err != nil {
@@ -629,8 +627,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 								logger.Errorf("merge thread: %v", gErr)
 								return
 							}
-							mergeBytes := bytes.NewBuffer(nil)
-							err = bsdiffx.Patch(baseReader, mergeBytes, bytes.NewBuffer(upperBytes))
+							mergeBytes, err := bsdiffx.Patch(baseBytes, bytes.NewBuffer(upperBytes))
 							if err != nil {
 								gErr = fmt.Errorf("failed to patch: %v", err)
 								cancel()
@@ -638,7 +635,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 								return
 							}
 
-							mergeCompressed, err := CompressWithZstd(mergeBytes.Bytes())
+							mergeCompressed, err := CompressWithZstd(mergeBytes)
 							if err != nil {
 								gErr = fmt.Errorf("failed to compresse merged bytes: %v", err)
 								cancel()

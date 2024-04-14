@@ -74,7 +74,6 @@ type FileEntry struct {
 	UID            uint32                `json:"uid"`
 	GID            uint32                `json:"gid"`
 	Type           EntryType             `json:"type"`
-	UncompressedGz bool                  `json:"uncompressedGz"`
 	RealPath       string                `json:"realPath,omitempty"`
 	Childs         map[string]*FileEntry `json:"childs"`
 	CompressedSize int64                 `json:"compressedSize,omitempty"`

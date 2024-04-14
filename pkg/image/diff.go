@@ -343,7 +343,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-						err = bsdiffx.Diff(bytes.NewBuffer(oldBytes), bytes.NewBuffer(newBytes), int64(len(newBytes)), diffWriter, dc.CompressionMode)
+						err = bsdiffx.Diff(oldBytes, newBytes, diffWriter, dc.CompressionMode)
 						if err != nil {
 							logger.Errorf("failed to bsdiff.Diff: %v", err)
 							break
