@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -34,7 +35,7 @@ func readFileAll(path string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
-func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffConfig) error {
+func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinaryDiff bool, dc DiffConfig, pm *bsdiffx.PluginManager) error {
 	oldDimg, err := OpenDimgFile(oldDimgPath)
 	if err != nil {
 		return err
@@ -54,7 +55,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer diffFile.Close()
 
 	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc, pm)
 	if err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	return nil
 }
 
-func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool, dc DiffConfig) error {
+func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isBinaryDiff bool, dc DiffConfig, pm *bsdiffx.PluginManager) error {
 	oldCdimg, err := OpenCdimgFile(oldCdimgPath)
 	if err != nil {
 		return err
@@ -96,7 +97,7 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 	defer diffCdimg.Close()
 
 	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc)
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc, pm)
 	if err != nil {
 		return err
 	}
@@ -185,7 +186,7 @@ func (dq *diffTaskQueue) Close() {
 	}
 }
 
-func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffConfig) error {
+func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffConfig, pm *bsdiffx.PluginManager) error {
 	diffTasks := make(chan diffTask, 1000)
 	writeTasks := make(chan diffTask, 1000)
 	wg := sync.WaitGroup{}
@@ -340,10 +341,11 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						continue
 					}
 					if len(oldBytes) > 0 && isBinaryDiff {
+						p := pm.GetPluginByExt(filepath.Ext(dt.newEntry.Name))
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-						err = bsdiffx.Diff(oldBytes, newBytes, diffWriter, dc.CompressionMode)
+						err = p.Diff(oldBytes, newBytes, diffWriter, dc.CompressionMode)
 						if err != nil {
 							logger.Errorf("failed to bsdiff.Diff: %v", err)
 							break

@@ -102,8 +102,12 @@ func dimgAction(c *cli.Context) error {
 		"outDimg":   outDimg,
 	}).Info("starting to merge")
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench || enableBenchPerFile {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -145,9 +149,9 @@ func dimgAction(c *cli.Context) error {
 		var mergedDimg *image.DimgEntry
 		switch mergeMode {
 		case "linear":
-			mergedDimg, err = image.MergeDimgsWithLinear(dimgEntry, tmpDir, mergeConfig, false)
+			mergedDimg, err = image.MergeDimgsWithLinear(dimgEntry, tmpDir, mergeConfig, false, pm)
 		case "bisect":
-			mergedDimg, err = image.MergeDimgsWithBisectMultithread(dimgEntry, tmpDir, mergeConfig, false)
+			mergedDimg, err = image.MergeDimgsWithBisectMultithread(dimgEntry, tmpDir, mergeConfig, false, pm)
 		default:
 			return fmt.Errorf("invalid mergeMode %s (only 'linear' or 'bisect' are allowed)", mergeMode)
 		}
@@ -164,7 +168,7 @@ func dimgAction(c *cli.Context) error {
 			panic(err)
 		}
 		defer mergeFile.Close()
-		header, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile, mergeConfig)
+		header, err = image.MergeDimg(lowerDimg, upperDimg, mergeFile, mergeConfig, pm)
 		if err != nil {
 			panic(err)
 		}
@@ -281,8 +285,12 @@ func cdimgAction(c *cli.Context) error {
 		"outCdimg":   outCdimg,
 	}).Info("starting to merge")
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench || enableBenchPerFile {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -327,9 +335,9 @@ func cdimgAction(c *cli.Context) error {
 		var mergedDimg *image.DimgEntry
 		switch mergeMode {
 		case "linear":
-			mergedDimg, err = image.MergeDimgsWithLinear(dimgEntry, tmpDir, mergeConfig, true)
+			mergedDimg, err = image.MergeDimgsWithLinear(dimgEntry, tmpDir, mergeConfig, true, pm)
 		case "bisect":
-			mergedDimg, err = image.MergeDimgsWithBisectMultithread(dimgEntry, tmpDir, mergeConfig, true)
+			mergedDimg, err = image.MergeDimgsWithBisectMultithread(dimgEntry, tmpDir, mergeConfig, true, pm)
 		default:
 			return fmt.Errorf("invalid mergeMode %s (only 'linear' or 'bisect' are allowed)", mergeMode)
 		}
@@ -347,7 +355,7 @@ func cdimgAction(c *cli.Context) error {
 			panic(err)
 		}
 		defer mergeFile.Close()
-		header, err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile, mergeConfig)
+		header, err = image.MergeCdimg(lowerCdimg, upperCdimg, mergeFile, mergeConfig, pm)
 		if err != nil {
 			panic(err)
 		}

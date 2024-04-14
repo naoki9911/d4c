@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	"github.com/sirupsen/logrus"
@@ -64,8 +65,11 @@ func dimgAction(c *cli.Context) error {
 
 	os.RemoveAll(outDir)
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -82,7 +86,7 @@ func dimgAction(c *cli.Context) error {
 	dimgHeader := dimgFile.DimgHeader()
 
 	start := time.Now()
-	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "")
+	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "", pm)
 	if err != nil {
 		panic(err)
 	}
@@ -155,8 +159,12 @@ func cdimgAction(c *cli.Context) error {
 
 	os.RemoveAll(outDir)
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -174,7 +182,7 @@ func cdimgAction(c *cli.Context) error {
 	dimgHeader := dimgFile.DimgHeader()
 
 	start := time.Now()
-	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "")
+	err = image.ApplyPatch(baseDir, outDir, &dimgHeader.FileEntry, dimgFile, dimgHeader.ParentId == "", pm)
 	if err != nil {
 		panic(err)
 	}

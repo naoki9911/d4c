@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/log"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 	"github.com/opencontainers/go-digest"
@@ -29,16 +30,18 @@ type DiffServer struct {
 	mergeConfig image.MergeConfig
 	serverMux   *http.ServeMux
 	lock        sync.Mutex
+	pm          *bsdiffx.PluginManager
 
 	dimgStore *image.DimgStore
 	imageTags map[string]diffImage
 }
 
-func NewDiffServer(mc image.MergeConfig) (*DiffServer, error) {
+func NewDiffServer(mc image.MergeConfig, pm *bsdiffx.PluginManager) (*DiffServer, error) {
 	server := &DiffServer{
 		mergeConfig: mc,
 		serverMux:   http.NewServeMux(),
 		lock:        sync.Mutex{},
+		pm:          pm,
 	}
 
 	err := server.clearAll()
@@ -199,7 +202,7 @@ func (ds *DiffServer) handleGetUpdateData(w http.ResponseWriter, r *http.Request
 		return
 	}
 	//resDimg, err := image.MergeDimgsWithLinear(selectedDimgPaths, tmpDir, ds.mergeConfig)
-	resDimg, err := image.MergeDimgsWithBisectMultithread(selectedDimgPaths, tmpDir, ds.mergeConfig, false)
+	resDimg, err := image.MergeDimgsWithBisectMultithread(selectedDimgPaths, tmpDir, ds.mergeConfig, false, ds.pm)
 	if err != nil {
 		logger.Errorf("failed to merge: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

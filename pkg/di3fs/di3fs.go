@@ -28,6 +28,7 @@ type Di3fsNode struct {
 	baseMeta []*image.FileEntry
 	data     []byte
 	root     *Di3fsRoot
+	plugin   *bsdiffx.Plugin
 }
 
 var _ = (fs.NodeGetattrer)((*Di3fsNode)(nil))
@@ -91,7 +92,7 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 				}
 				patchReader := bytes.NewBuffer(patchBytes)
 
-				newBytes, err := bsdiffx.Patch(data, patchReader)
+				newBytes, err := dn.plugin.Patch(data, patchReader)
 				if err != nil {
 					return nil, err
 				}
@@ -147,7 +148,7 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 			return 0, 0, syscall.EIO
 		}
 
-		newBytes, err := bsdiffx.Patch(baseData, patchReader)
+		newBytes, err := dn.plugin.Patch(baseData, patchReader)
 		if err != nil {
 			log.Errorf("Open failed(bsdiff) err=%v", err)
 			return 0, 0, syscall.EIO
@@ -266,6 +267,7 @@ type Di3fsRoot struct {
 	inodes         map[string]*fs.Inode
 	nodes          map[string]*Di3fsNode
 	hardlinks      []*hardlinkNode
+	pm             *bsdiffx.PluginManager
 }
 
 func (dr *Di3fsRoot) IsBase() bool {
@@ -273,16 +275,21 @@ func (dr *Di3fsRoot) IsBase() bool {
 }
 
 func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *Di3fsNode {
+	var p *bsdiffx.Plugin = nil
+	if root != nil {
+		p = root.pm.GetPluginByExt(filepath.Ext(fe.Name))
+	}
 	node := &Di3fsNode{
 		linkNum:  1,
 		meta:     fe,
 		baseMeta: baseFE,
 		root:     root,
+		plugin:   p,
 	}
 	return node
 }
 
-func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile) (Di3fsRoot, error) {
+func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile, pm *bsdiffx.PluginManager) (Di3fsRoot, error) {
 	baseFEs := make([]*image.FileEntry, 0)
 	for i := range baseImages {
 		if baseImages[i] == nil {
@@ -298,6 +305,7 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 		inodes:         map[string]*fs.Inode{},
 		nodes:          map[string]*Di3fsNode{},
 		hardlinks:      []*hardlinkNode{},
+		pm:             pm,
 	}
 	rootNode.root = &root
 
@@ -346,7 +354,12 @@ func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 	opts.MountOptions.Name = "fuse-diff"
 	opts.NullPermissions = true
 
-	di3fsRoot, err := NewDi3fsRoot(opts, parentImageFiles, diffImageFile)
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
+	di3fsRoot, err := NewDi3fsRoot(opts, parentImageFiles, diffImageFile, pm)
 	if err != nil {
 		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
 	}

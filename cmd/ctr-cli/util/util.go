@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
@@ -56,6 +57,11 @@ func diffCommand() *cli.Command {
 			newFilePath := c.String("new")
 			diffFilePath := c.String("diff")
 
+			pm, err := bsdiffx.LoadOrDefaultPlugins("")
+			if err != nil {
+				return err
+			}
+			p := pm.GetPluginByExt(filepath.Ext(newFilePath))
 			compMode, err := bsdiffx.GetCompressMode(c.String("compressionMode"))
 			if err != nil {
 				return err
@@ -85,7 +91,7 @@ func diffCommand() *cli.Command {
 				return err
 			}
 			defer newFile.Close()
-			err = bsdiffx.Diff(oldBytes, newBytes, diffFile, compMode)
+			err = p.Diff(oldBytes, newBytes, diffFile, compMode)
 			if err != nil {
 				return err
 			}
@@ -123,13 +129,19 @@ func patchCommand() *cli.Command {
 			newFilePath := c.String("new")
 			diffFilePath := c.String("diff")
 
+			pm, err := bsdiffx.LoadOrDefaultPlugins("")
+			if err != nil {
+				return err
+			}
+			p := pm.GetPluginByExt(filepath.Ext(newFilePath))
+
 			diffFile, err := os.Open(diffFilePath)
 			if err != nil {
 				return err
 			}
 			defer diffFile.Close()
 
-			err = image.ApplyFilePatch(oldFilePath, newFilePath, diffFile)
+			err = image.ApplyFilePatch(oldFilePath, newFilePath, diffFile, p)
 			if err != nil {
 				return err
 			}
@@ -179,6 +191,12 @@ func mergeCommand() *cli.Command {
 			base := c.String("base")
 			updated := c.String("updated")
 
+			pm, err := bsdiffx.LoadOrDefaultPlugins("")
+			if err != nil {
+				return err
+			}
+			p := pm.GetPluginByExt(filepath.Ext(upper))
+
 			lowerFile, err := os.Open(lower)
 			if err != nil {
 				return fmt.Errorf("failed to open lower %s: %v", lower, err)
@@ -208,12 +226,12 @@ func mergeCommand() *cli.Command {
 				}
 				defer updatedFile.Close()
 
-				err = image.DeltaMergingBytesDebug(lowerFile, upperFile, outFile, baseFile, updatedFile)
+				err = bsdiffx.DeltaMergingBytesDebug(lowerFile, upperFile, outFile, baseFile, updatedFile)
 				if err != nil {
 					return fmt.Errorf("failed to DeltaMerging: %v", err)
 				}
 			} else {
-				err = image.DeltaMergingBytes(lowerFile, upperFile, outFile)
+				err = p.Merge(lowerFile, upperFile, outFile)
 				if err != nil {
 					return fmt.Errorf("failed to DeltaMerging: %v", err)
 				}

@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	"github.com/containerd/containerd/log"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/server"
 )
@@ -18,7 +19,13 @@ func main() {
 		ThreadNum:              *threadNum,
 		MergeDimgConcurrentNum: 4,
 	}
-	ds, err := server.NewDiffServer(mc)
+
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		logger.Errorf("failed to load plugins: %v", err)
+	}
+
+	ds, err := server.NewDiffServer(mc, pm)
 	if err != nil {
 		logger.Errorf("failed to create DiffServer: %v", err)
 	}

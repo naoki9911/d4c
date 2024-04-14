@@ -13,7 +13,7 @@ import (
 	cp "github.com/otiai10/copy"
 )
 
-func ApplyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
+func ApplyFilePatch(baseFilePath, newFilePath string, patch io.Reader, p *bsdiffx.Plugin) error {
 	//fmt.Println(newFilePath)
 	baseFile, err := os.Open(baseFilePath)
 	if err != nil {
@@ -30,7 +30,7 @@ func ApplyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 	if err != nil {
 		return err
 	}
-	newBytes, err := bsdiffx.Patch(baseBytes, patch)
+	newBytes, err := p.Patch(baseBytes, patch)
 	if err != nil {
 		return err
 	}
@@ -65,8 +65,8 @@ func ApplyFilePatch(baseFilePath, newFilePath string, patch io.Reader) error {
 //	return nil
 //}
 
-func ApplyPatch(basePath, newPath string, dirEntry *FileEntry, img *DimgFile, isBase bool) error {
-	hardlinks, err := applyPatchImpl(basePath, newPath, dirEntry, img, isBase)
+func ApplyPatch(basePath, newPath string, dirEntry *FileEntry, img *DimgFile, isBase bool, pm *bsdiffx.PluginManager) error {
+	hardlinks, err := applyPatchImpl(basePath, newPath, dirEntry, img, isBase, pm)
 	if err != nil {
 		return fmt.Errorf("failed to apply patch: %v", err)
 	}
@@ -87,7 +87,7 @@ type hardlinkEntry struct {
 	link string
 }
 
-func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile, isBase bool) ([]*hardlinkEntry, error) {
+func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile, isBase bool, pm *bsdiffx.PluginManager) ([]*hardlinkEntry, error) {
 	fName := dirEntry.Name
 	baseFilePath := path.Join(basePath, fName)
 	newFilePath := path.Join(newPath, fName)
@@ -128,7 +128,7 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 			return nil, err
 		}
 		for _, c := range dirEntry.Childs {
-			h, err := applyPatchImpl(baseFilePath, newFilePath, c, img, isBase)
+			h, err := applyPatchImpl(baseFilePath, newFilePath, c, img, isBase, pm)
 			if err != nil {
 				return nil, err
 			}
@@ -167,6 +167,7 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 			return nil, err
 		}
 	} else if dirEntry.Type == FILE_ENTRY_FILE_DIFF {
+		p := pm.GetPluginByExt(filepath.Ext(dirEntry.Name))
 		var patchReader io.Reader
 		logger.Debugf("applying diff to %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
 		patchBytes := make([]byte, dirEntry.CompressedSize)
@@ -175,7 +176,7 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 			return nil, err
 		}
 		patchReader = bytes.NewBuffer(patchBytes)
-		err = ApplyFilePatch(baseFilePath, newFilePath, patchReader)
+		err = ApplyFilePatch(baseFilePath, newFilePath, patchReader, p)
 		if err != nil {
 			return nil, err
 		}

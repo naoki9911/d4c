@@ -100,12 +100,16 @@ func dimgAction(c *cli.Context) error {
 		"mode":    mode,
 	}).Info("starting to diff")
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
 	if mode != ModeDiffBinary && mode != ModeDiffFile {
 		logger.Fatalf("mode '%s' does not exist. only 'binary-diff' or 'file-diff' is allowed", mode)
 	}
 
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench || enableBenchPerFile {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -130,7 +134,7 @@ func dimgAction(c *cli.Context) error {
 		BenchmarkPerFile: enableBenchPerFile,
 		Benchmarker:      b,
 	}
-	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc)
+	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc, pm)
 	if err != nil {
 		panic(err)
 	}
@@ -242,12 +246,16 @@ func cdimgAction(c *cli.Context) error {
 		"mode":     mode,
 	}).Info("starting to diff")
 
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
 	if mode != ModeDiffBinary && mode != ModeDiffFile {
 		logger.Fatalf("mode '%s' does not exist. only 'binary-diff' or 'file-diff' is allowed", mode)
 	}
 
 	var b *benchmark.Benchmark = nil
-	var err error
 	if enableBench {
 		b, err = benchmark.NewBenchmark("./benchmark.log")
 		if err != nil {
@@ -272,7 +280,7 @@ func cdimgAction(c *cli.Context) error {
 		BenchmarkPerFile: enableBenchPerFile,
 		Benchmarker:      b,
 	}
-	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary, dc)
+	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary, dc, pm)
 	if err != nil {
 		panic(err)
 	}

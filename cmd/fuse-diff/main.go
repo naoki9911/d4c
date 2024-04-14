@@ -19,6 +19,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/di3fs"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
@@ -232,7 +233,12 @@ func runMain(isChild bool, readyFd *os.File) error {
 	// Leave file permissions on "000" files as-is
 	opts.NullPermissions = true
 
-	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, parentImages, diffImageFile)
+	pm, err := bsdiffx.LoadOrDefaultPlugins("")
+	if err != nil {
+		return err
+	}
+
+	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, parentImages, diffImageFile, pm)
 	if err != nil {
 		return fmt.Errorf("creating Di3fsRoot failed: %v", err)
 	}
