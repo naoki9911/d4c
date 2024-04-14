@@ -80,7 +80,10 @@ func action(c *cli.Context) error {
 	img := c.String("image")
 	OS := c.String("os")
 	arch := c.String("arch")
-	puller := oci.NewPuller()
+	puller, err := oci.NewPuller()
+	if err != nil {
+		return fmt.Errorf("failed to create puller: %v", err)
+	}
 	logger.WithFields(logrus.Fields{"image": img, "os": OS, "arch": arch}).Info("started to pull image")
 	layer, config, err := puller.Pull(img, OS, arch)
 	if err != nil {

@@ -24,15 +24,21 @@ var acceptableMediaTypes = map[types.MediaType]bool{
 }
 
 type Puller struct {
+	cache  *BlobCache
 	logger *logrus.Entry
 }
 
-func NewPuller() *Puller {
+func NewPuller() (*Puller, error) {
+	cache, err := NewBlobCache()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create BlobCache: %v", err)
+	}
 	p := &Puller{
+		cache:  cache,
 		logger: log.G(context.TODO()),
 	}
 
-	return p
+	return p, nil
 }
 
 func (p *Puller) Pull(imageName string, os, arch string) (v1.Layer, *v1.ConfigFile, error) {
@@ -103,7 +109,7 @@ func (p *Puller) Pull(imageName string, os, arch string) (v1.Layer, *v1.ConfigFi
 	return layer, config, nil
 }
 
-func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, os, arch string) (v1.Layer, *v1.ConfigFile, error) {
+func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, OS, arch string) (v1.Layer, *v1.ConfigFile, error) {
 	im, err := idx.IndexManifest()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to IndexManifest: %v", err)
@@ -111,7 +117,7 @@ func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, os, arch strin
 
 	manifests := []v1.Descriptor{}
 	for i, m := range im.Manifests {
-		if m.Platform.OS != os {
+		if m.Platform.OS != OS {
 			continue
 		}
 		if m.Platform.Architecture != arch {
@@ -121,7 +127,7 @@ func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, os, arch strin
 	}
 
 	if len(manifests) == 0 {
-		return nil, nil, fmt.Errorf("no available Image found for os=%s arch=%s", os, arch)
+		return nil, nil, fmt.Errorf("no available Image found for os=%s arch=%s", OS, arch)
 	}
 
 	if len(manifests) > 1 {
@@ -133,12 +139,13 @@ func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, os, arch strin
 	}
 
 	m := manifests[0]
+
 	img, err := idx.Image(m.Digest)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to Image with %s: %v", m.Digest, err)
 	}
 
-	layer, config, err := p.retrieveFlattenLayerFromImage(img, os, arch)
+	layer, config, err := p.retrieveFlattenLayerFromImage(img, OS, arch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to flatten: %v", err)
 	}
@@ -147,17 +154,53 @@ func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, os, arch strin
 		return nil, nil, fmt.Errorf("unexpected architecture in config expected=%s actual=%s", arch, config.Architecture)
 	}
 
-	if config.OS != os {
-		return nil, nil, fmt.Errorf("unexpected os in config expected=%s actual=%s", os, config.OS)
+	if config.OS != OS {
+		return nil, nil, fmt.Errorf("unexpected os in config expected=%s actual=%s", OS, config.OS)
 	}
 
 	return layer, config, nil
 }
 
 func (p *Puller) retrieveFlattenLayerFromImage(img v1.Image, os, arch string) (v1.Layer, *v1.ConfigFile, error) {
-	l, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) { return mutate.Extract(img), nil })
+	imgDigest, err := img.Digest()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get image digest: %v", err)
+	}
+
+	configName, err := img.ConfigName()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get ConfigName: %v", err)
+	}
+
+	l, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) { return p.cache.Get(&imgDigest) })
+	if err == nil {
+		configReader, err := p.cache.Get(&configName)
+		if err == nil {
+			c, err := v1.ParseConfigFile(configReader)
+			if err == nil {
+				return l, c, nil
+			} else {
+				p.logger.Warnf("failed to parse config blob %s from cache", configName)
+			}
+		} else {
+			p.logger.Warnf("failed to get config blob %s from cache", configName)
+		}
+	} else {
+		p.logger.Warnf("failed to get layer blob %s from cache", imgDigest)
+	}
+
+	l, err = tarball.LayerFromOpener(func() (io.ReadCloser, error) { return mutate.Extract(img), nil })
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed tarball.LayerFromOpener: %v", err)
+	}
+
+	comp, err := l.Compressed()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get Layer.Compressed(): %v", err)
+	}
+	err = p.cache.Store(&imgDigest, comp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to store %s: %v", imgDigest, err)
 	}
 
 	config, err := img.ConfigFile()
@@ -171,6 +214,16 @@ func (p *Puller) retrieveFlattenLayerFromImage(img v1.Image, os, arch string) (v
 
 	if config.OS != os {
 		return nil, nil, fmt.Errorf("unexpected os in config expected=%s actual=%s", os, config.OS)
+	}
+
+	configBytes, err := img.RawConfigFile()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get RawConfigFile: %v", err)
+	}
+
+	err = p.cache.StoreBytes(&configName, configBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to store ConfigFile: %v", err)
 	}
 
 	return l, config, nil

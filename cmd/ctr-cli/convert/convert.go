@@ -54,7 +54,7 @@ var Flags = []cli.Flag{
 	},
 }
 
-var workDir = filepath.Join(os.TempDir(), "ctr-cli")
+var workDir = filepath.Join(os.TempDir(), "ctr-cli", "convert")
 
 type dockerImageManifest struct {
 	Config   string   `json:"Config"`
@@ -216,7 +216,7 @@ func Action(c *cli.Context) error {
 	}
 
 	// convert layer.tar to dimg
-	tempDir, err := os.MkdirTemp("/tmp/ctr-cli", "*")
+	tempDir, err := os.MkdirTemp("/tmp/ctr-cli/convert", "*")
 	if err != nil {
 		return err
 	}
@@ -236,12 +236,6 @@ func Action(c *cli.Context) error {
 			return fmt.Errorf("failed to exclude %s (path=%s)", exclude, p)
 		}
 	}
-
-	tempDiffDir, err := os.MkdirTemp("/tmp/ctr-cli", "*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempDiffDir)
 
 	logger.Info("packing dimg")
 	dimgPath := filepath.Join(outputPath, "image.dimg")
