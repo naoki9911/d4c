@@ -22,7 +22,7 @@ with open(sys.argv[1]) as f:
 
 labels = []
 for task in ["patch", "di3fs"]:
-    for comp in ["bzip2", "zstd"]:
+    for comp in ["bzip2"]:
         labels.append("{}-comp-{}".format(task, comp))
 
 plt.rcParams["figure.figsize"] = (20,10)

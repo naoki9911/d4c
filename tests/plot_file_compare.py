@@ -18,10 +18,11 @@ with open(sys.argv[1]) as f:
         path = r["path"]
         fileSize = r["fileSize"]
         # ignore 0-bytes file
-        if fileSize == 0:
-            continue
+        # file maybe FILE_SAME, it must be ignored
         fileDiffSize = r["fileEntryACompressionSize"]
         binaryDiffSize = r["fileEntryBCompressionSize"]
+        if fileSize == 0 or binaryDiffSize == 0 or fileDiffSize == 0:
+            continue
         efficiency = float(binaryDiffSize) / float(fileDiffSize)
         tag = "{}:{}-{}".format(imageName, old, new)
         if tag not in compare:

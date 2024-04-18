@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
@@ -20,6 +21,10 @@ func Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {
 
 func Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 	return bsdiffx.DeltaMergingBytes(lowerDiff, upperDiff, mergedDiff)
+}
+
+func Compare(a, b []byte) bool {
+	return bytes.Equal(a, b)
 }
 
 func init() {

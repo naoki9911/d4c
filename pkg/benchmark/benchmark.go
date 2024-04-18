@@ -18,6 +18,7 @@ type Metric struct {
 	TaskName     string            `json:"taskName"`
 	Timestamp    time.Time         `json:"timestamp"`
 	ElapsedMilli int               `json:"elapsedMilliseconds"`
+	ElapsedMicro int64             `json:"elapsedMicroseconds"`
 	Size         int64             `json:"size"`
 	Labels       map[string]string `json:"labels"`
 }

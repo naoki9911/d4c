@@ -8,7 +8,9 @@ import (
 type FileEntryCompareResult struct {
 	Path                      string            `json:"path"`
 	FileSize                  int               `json:"fileSize"`
+	FileEntryAType            EntryType         `json:"fileEntryAType"`
 	FileEntryACompressionSize int               `json:"fileEntryACompressionSize"`
+	FileEntryBType            EntryType         `json:"fileEntryBType"`
 	FileEntryBCompressionSize int               `json:"fileEntryBCompressionSize"`
 	Labels                    map[string]string `json:"labels"`
 }
@@ -34,11 +36,13 @@ func CompareFileEntries(feA, feB *FileEntry, pathPrefix string) ([]FileEntryComp
 		return nil, fmt.Errorf("invalid FileEntry. %s has both Childs and Body", path)
 	}
 
-	if len(feA.Childs) == 0 && feA.HasBody() {
+	if len(feA.Childs) == 0 {
 		fecr := FileEntryCompareResult{
 			Path:                      filepath.Join(pathPrefix, feA.Name),
 			FileSize:                  feA.Size,
+			FileEntryAType:            feA.Type,
 			FileEntryACompressionSize: int(feA.CompressedSize),
+			FileEntryBType:            feB.Type,
 			FileEntryBCompressionSize: int(feB.CompressedSize),
 		}
 		return []FileEntryCompareResult{fecr}, nil

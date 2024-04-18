@@ -84,7 +84,15 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 		$BIN_FUSE --label=$LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
 		sleep 1
 		if [ $j -eq 0 ]; then
-			diff -r $UPPER /tmp/fuse --no-dereference
+			# invalidate file and page cache
+			# some environments (e.g. GHA) does not allow to modify this value
+			set +u
+			if [ $RUNNER != "GHA" ]; then
+				echo 3 | sudo tee /proc/sys/vm/drop_caches
+			fi
+			set -u
+
+			$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER stat diff --benchmark --pathALabel native --pathBLabel di3fs $UPPER /tmp/fuse
 		fi
 		fusermount3 -u /tmp/fuse
 	done
@@ -96,6 +104,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
 	done
 
+	# collect file sizes comparing file-delta and binary-delta
 	$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER stat compare --fileDimg ./diff_file_$DIFF_NAME.dimg --binaryDimg ./diff_$DIFF_NAME.dimg >> compare.log
 
 	# packing diff data and test it

@@ -46,10 +46,10 @@ with open(sys.argv[1]) as f:
 
 labels = []
 for th in ["1", "8"]:
-    for sched in ["none", "size-ordered"]:
+    for sched in ["size-ordered"]:
         if th == "1" and sched != "none":
             continue
-        for comp in ["bzip2", "zstd"]:
+        for comp in ["bzip2"]:
             labels.append("th-{}-sched-{}-comp-{}".format(th, sched, comp))
 
 plt.rcParams["figure.figsize"] = (10,10)

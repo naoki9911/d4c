@@ -1,6 +1,7 @@
 package bsdiffx
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -83,24 +84,30 @@ func (pm *PluginManager) GetPluginByExt(ext string) *Plugin {
 }
 
 type Plugin struct {
-	p     *plugin.Plugin
-	info  func() string
-	diff  func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode) error
-	patch func(oldBytes []byte, patchReader io.Reader) ([]byte, error)
-	merge func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error
+	p       *plugin.Plugin
+	info    func() string
+	diff    func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode) error
+	patch   func(oldBytes []byte, patchReader io.Reader) ([]byte, error)
+	merge   func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error
+	compare func(a, b []byte) bool
 }
 
-func DefaultPluginInfo() string {
+func defaultPluginInfo() string {
 	return "Default plugin with bsdiffx"
+}
+
+func defaultCompare(a, b []byte) bool {
+	return bytes.Equal(a, b)
 }
 
 func DefaultPluigin() *Plugin {
 	p := &Plugin{}
 
-	p.info = DefaultPluginInfo
+	p.info = defaultPluginInfo
 	p.diff = Diff
 	p.patch = Patch
 	p.merge = DeltaMergingBytes
+	p.compare = defaultCompare
 
 	return p
 }
@@ -140,6 +147,12 @@ func OpenPlugin(path string) (*Plugin, error) {
 	}
 	plugin.merge = sMerge.(func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error)
 
+	sCompare, err := p.Lookup("Compare")
+	if err != nil {
+		return nil, err
+	}
+	plugin.compare = sCompare.(func(a, b []byte) bool)
+
 	return plugin, nil
 }
 
@@ -157,4 +170,8 @@ func (p *Plugin) Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {
 
 func (p *Plugin) Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 	return p.merge(lowerDiff, upperDiff, mergedDiff)
+}
+
+func (p *Plugin) Compare(a, b []byte) bool {
+	return p.compare(a, b)
 }
