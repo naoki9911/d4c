@@ -289,6 +289,11 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 			case FILE_ENTRY_FILE_SAME:
 				// lower must have FILE_NEW or FILE_DIFF
 				if lowerChild.HasBody() {
+					// upperChild's metadata can be updated
+					lowerChild.Mode = upperChild.Mode
+					lowerChild.UID = upperChild.UID
+					lowerChild.GID = upperChild.GID
+					lowerChild.Digest = upperChild.Digest
 					upperEntry.Childs[upperfName] = lowerChild
 					taskChan <- mergeTask{
 						lowerEntry: lowerChild,

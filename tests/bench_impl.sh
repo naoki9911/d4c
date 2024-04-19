@@ -87,7 +87,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 			# invalidate file and page cache
 			# some environments (e.g. GHA) does not allow to modify this value
 			set +u
-			if [ $RUNNER != "GHA" ]; then
+			if [ "$RUNNER" != "GHA" ]; then
 				echo 3 | sudo tee /proc/sys/vm/drop_caches
 			fi
 			set -u

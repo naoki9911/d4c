@@ -107,54 +107,62 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 
 func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 	if len(dn.data) != 0 {
-	} else if dn.meta.IsNew() {
-		patchBytes := make([]byte, dn.meta.CompressedSize)
-		_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
-		if err != nil {
-			log.Errorf("failed to read from diffImage offset=%d err=%s", dn.meta.Offset, err)
-			return 0, 0, syscall.EIO
-		}
-		patchBuf := bytes.NewBuffer(patchBytes)
-		patchReader, err := zstd.NewReader(patchBuf)
-		if err != nil {
-			log.Errorf("failed to create zstd Reader err=%s", err)
-			return 0, 0, syscall.EIO
-		}
-		defer patchReader.Close()
-		dn.data, err = io.ReadAll(patchReader)
-		if err != nil {
-			log.Errorf("failed to read with zstd Reader err=%s", err)
-			return 0, 0, syscall.EIO
-		}
-	} else if dn.meta.IsSame() {
-		data, err := dn.readBaseFiles()
-		if err != nil {
-			log.Errorf("failed to read from base: %v", err)
-			return 0, 0, syscall.EIO
-		}
-		dn.data = data
 	} else {
-		var patchReader io.Reader
-		patchBytes := make([]byte, dn.meta.CompressedSize)
-		_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
-		if err != nil {
-			log.Errorf("failed to read from diffImage offset=%d len=%d err=%s", dn.meta.Offset, len(patchBytes), err)
-			return 0, 0, syscall.EIO
-		}
-		patchReader = bytes.NewBuffer(patchBytes)
-		baseData, err := dn.readBaseFiles()
-		if err != nil {
-			log.Errorf("failed to read from base: %v", err)
-			return 0, 0, syscall.EIO
+		if dn.meta.IsNew() {
+			patchBytes := make([]byte, dn.meta.CompressedSize)
+			_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
+			if err != nil {
+				log.Errorf("failed to read from diffImage offset=%d err=%s", dn.meta.Offset, err)
+				return 0, 0, syscall.EIO
+			}
+			patchBuf := bytes.NewBuffer(patchBytes)
+			patchReader, err := zstd.NewReader(patchBuf)
+			if err != nil {
+				log.Errorf("failed to create zstd Reader err=%s", err)
+				return 0, 0, syscall.EIO
+			}
+			defer patchReader.Close()
+			dn.data, err = io.ReadAll(patchReader)
+			if err != nil {
+				log.Errorf("failed to read with zstd Reader err=%s", err)
+				return 0, 0, syscall.EIO
+			}
+		} else if dn.meta.IsSame() {
+			data, err := dn.readBaseFiles()
+			if err != nil {
+				log.Errorf("failed to read from base: %v", err)
+				return 0, 0, syscall.EIO
+			}
+			dn.data = data
+		} else {
+			var patchReader io.Reader
+			patchBytes := make([]byte, dn.meta.CompressedSize)
+			_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
+			if err != nil {
+				log.Errorf("failed to read from diffImage offset=%d len=%d err=%s", dn.meta.Offset, len(patchBytes), err)
+				return 0, 0, syscall.EIO
+			}
+			patchReader = bytes.NewBuffer(patchBytes)
+			baseData, err := dn.readBaseFiles()
+			if err != nil {
+				log.Errorf("failed to read from base: %v", err)
+				return 0, 0, syscall.EIO
+			}
+
+			newBytes, err := dn.plugin.Patch(baseData, patchReader)
+			if err != nil {
+				log.Errorf("Open failed(bsdiff) err=%v", err)
+				return 0, 0, syscall.EIO
+			}
+			dn.data = newBytes
+			log.Debugf("Successfully patched %s", dn.meta.Name)
 		}
 
-		newBytes, err := dn.plugin.Patch(baseData, patchReader)
+		err := dn.meta.Verify(dn.data)
 		if err != nil {
-			log.Errorf("Open failed(bsdiff) err=%v", err)
+			log.Errorf("failed to verify %s(%d): %v", dn.path, dn.meta.Type, err)
 			return 0, 0, syscall.EIO
 		}
-		dn.data = newBytes
-		log.Debugf("Successfully patched %s", dn.meta.Name)
 	}
 	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
 }
@@ -205,6 +213,14 @@ func (dr *Di3fsNode) OnAdd(ctx context.Context) {
 	if dr.root.IsBase() && dr.meta.IsBaseRequired() {
 		log.Fatalf("invalid base image")
 	}
+
+	if !dr.meta.IsFile() {
+		err := dr.meta.Verify(nil)
+		if err != nil {
+			log.Fatalf("failed to verify %s: %v", dr.path, err)
+		}
+	}
+
 	// here, rootNode is initialized
 	//log.Debugf("base=%s patch=%s", dr.basePath, dr.patchPath)
 	for childfName := range dr.meta.Childs {

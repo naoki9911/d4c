@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/opencontainers/go-digest"
 )
 
 type EntryType int
@@ -68,16 +70,18 @@ func UnmarshalJsonFromCompressed[T any](b []byte) (*T, error) {
 }
 
 type FileEntry struct {
-	Name           string                `json:"name"`
-	Size           int                   `json:"size"`
-	Mode           uint32                `json:"mode"`
-	UID            uint32                `json:"uid"`
-	GID            uint32                `json:"gid"`
-	Type           EntryType             `json:"type"`
-	RealPath       string                `json:"realPath,omitempty"`
-	Childs         map[string]*FileEntry `json:"childs"`
-	CompressedSize int64                 `json:"compressedSize,omitempty"`
-	Offset         int64                 `json:"offset,omitempty"`
+	Name     string                `json:"name"`
+	Size     int                   `json:"size"`
+	Mode     uint32                `json:"mode"`
+	UID      uint32                `json:"uid"`
+	GID      uint32                `json:"gid"`
+	RealPath string                `json:"realPath,omitempty"`
+	Childs   map[string]*FileEntry `json:"childs"`
+
+	Type           EntryType     `json:"type"`
+	CompressedSize int64         `json:"compressedSize,omitempty"`
+	Offset         int64         `json:"offset,omitempty"`
+	Digest         digest.Digest `json:"digest"`
 }
 
 func (fe *FileEntry) DeepCopy() *FileEntry {
@@ -139,6 +143,11 @@ func (fe FileEntry) IsSame() bool {
 func (fe FileEntry) IsLink() bool {
 	return fe.Type == FILE_ENTRY_SYMLINK
 }
+func (fe FileEntry) IsFile() bool {
+	return fe.Type == FILE_ENTRY_FILE_DIFF ||
+		fe.Type == FILE_ENTRY_FILE_NEW ||
+		fe.Type == FILE_ENTRY_FILE_SAME
+}
 
 func (fe FileEntry) IsBaseRequired() bool {
 	return fe.Type == FILE_ENTRY_FILE_DIFF ||
@@ -184,4 +193,74 @@ func (fe *FileEntry) lookupImpl(paths []string) (*FileEntry, error) {
 		return nil, fmt.Errorf("not found")
 	}
 	return child.lookupImpl(paths[1:])
+}
+
+type feForDigest struct {
+	Name     string          `json:"name"`
+	Size     int             `json:"size"`
+	Mode     uint32          `json:"mode"`
+	UID      uint32          `json:"uid"`
+	GID      uint32          `json:"gid"`
+	RealPath string          `json:"realPath,omitempty"`
+	Childs   []digest.Digest `json:"childs"`
+}
+
+func (fe *FileEntry) feForDigest() (*feForDigest, error) {
+	res := &feForDigest{
+		Name:     fe.Name,
+		Size:     fe.Size,
+		Mode:     fe.Mode,
+		UID:      fe.UID,
+		GID:      fe.GID,
+		RealPath: fe.RealPath,
+		Childs:   []digest.Digest{},
+	}
+
+	if fe.IsDir() {
+		childNames := []string{}
+		for name := range fe.Childs {
+			childNames = append(childNames, name)
+		}
+		slices.Sort(childNames)
+
+		for _, name := range childNames {
+			c := fe.Childs[name]
+			if c.Digest == "" {
+				return nil, fmt.Errorf("child %s does not have digest", name)
+			}
+			res.Childs = append(res.Childs, c.Digest)
+		}
+	}
+
+	return res, nil
+}
+
+func (fe *FileEntry) GenerateDigest(body []byte) (digest.Digest, error) {
+	fed, err := fe.feForDigest()
+	if err != nil {
+		return "", nil
+	}
+	feBytes, err := json.Marshal(fed)
+	if err != nil {
+		return "", nil
+	}
+
+	if fe.IsFile() {
+		feBytes = append(feBytes, body...)
+	}
+	d := digest.FromBytes(feBytes)
+	return d, nil
+}
+
+func (fe *FileEntry) Verify(body []byte) error {
+	d, err := fe.GenerateDigest(body)
+	if err != nil {
+		return nil
+	}
+
+	if d != fe.Digest {
+		return fmt.Errorf("failed to verify digest")
+	}
+
+	return nil
 }

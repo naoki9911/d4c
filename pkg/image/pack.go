@@ -90,7 +90,6 @@ func packDirImplMultithread(dirPath string, layer v1.Layer, outDirEntry *FileEnt
 					break
 				}
 				ct.entry.CompressedSize = int64(outBuffer.Len())
-				ct.entry.Type = FILE_ENTRY_FILE_NEW
 				ct.data = outBuffer
 				writeTasks <- ct
 			}
@@ -151,29 +150,37 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 			}
 			entry.Type = FILE_ENTRY_SYMLINK
 			entry.RealPath = realPath
+			entry.Digest, err = entry.GenerateDigest(nil)
+			if err != nil {
+				return err
+			}
 			parentEntry.Childs[fName] = entry
-			continue
-		}
+		} else {
+			entry.Type = FILE_ENTRY_FILE_NEW
+			err = entry.SetUGID(dirFilePath)
+			if err != nil {
+				return err
+			}
 
-		err = entry.SetUGID(dirFilePath)
-		if err != nil {
-			return err
-		}
+			entry.Size, err = getFileSize(dirFilePath)
+			if err != nil {
+				return err
+			}
 
-		entry.Size, err = getFileSize(dirFilePath)
-		if err != nil {
-			return err
-		}
+			fileBody, err := readFileAll(dirFilePath)
+			if err != nil {
+				return fmt.Errorf("failed to read file %s: %v", dirFilePath, err)
+			}
+			entry.Digest, err = entry.GenerateDigest(fileBody)
+			if err != nil {
+				return err
+			}
 
-		fileBody, err := readFileAll(dirFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %v", dirFilePath, err)
-		}
-
-		parentEntry.Childs[fName] = entry
-		taskChan <- packTask{
-			entry: entry,
-			data:  bytes.NewBuffer(fileBody),
+			parentEntry.Childs[fName] = entry
+			taskChan <- packTask{
+				entry: entry,
+				data:  bytes.NewBuffer(fileBody),
+			}
 		}
 	}
 
@@ -201,6 +208,10 @@ func enqueuePackTaskToChannel(dirPath string, parentEntry *FileEntry, taskChan c
 	}
 
 	parentEntry.Type = FILE_ENTRY_DIR_NEW
+	parentEntry.Digest, err = parentEntry.GenerateDigest(nil)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -254,9 +265,18 @@ func enqueuePackTaskToChannelFromLayer(layer v1.Layer, rootEntry *FileEntry, tas
 				if err != nil {
 					return fmt.Errorf("failed to copy %s: %v", header.Name, err)
 				}
+				entry.Digest, err = entry.GenerateDigest(data.Bytes())
+				if err != nil {
+					return err
+				}
 				taskChan <- packTask{
 					entry: entry,
 					data:  &data,
+				}
+			} else {
+				entry.Digest, err = entry.GenerateDigest(nil)
+				if err != nil {
+					return err
 				}
 			}
 			dirEntry.Childs[basename] = entry
@@ -264,11 +284,19 @@ func enqueuePackTaskToChannelFromLayer(layer v1.Layer, rootEntry *FileEntry, tas
 		case tar.TypeSymlink:
 			entry.Type = FILE_ENTRY_SYMLINK
 			entry.RealPath = header.Linkname
+			entry.Digest, err = entry.GenerateDigest(nil)
+			if err != nil {
+				return err
+			}
 			dirEntry.Childs[basename] = entry
 			files[header.Name] = entry
 		case tar.TypeLink:
 			entry.Type = FILE_ENTRY_HARDLINK
 			entry.RealPath = header.Linkname
+			entry.Digest, err = entry.GenerateDigest(nil)
+			if err != nil {
+				return err
+			}
 			dirEntry.Childs[basename] = entry
 			files[header.Name] = entry
 		case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
@@ -277,6 +305,30 @@ func enqueuePackTaskToChannelFromLayer(layer v1.Layer, rootEntry *FileEntry, tas
 			return fmt.Errorf("file %s has unexpected type flag: %d", header.Name, header.Typeflag)
 		}
 	}
+
+	err = generateDigestDir(rootEntry)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func generateDigestDir(parentFe *FileEntry) error {
+	if !parentFe.IsDir() {
+		return nil
+	}
+	for name := range parentFe.Childs {
+		c := parentFe.Childs[name]
+		err := generateDigestDir(c)
+		if err != nil {
+			return err
+		}
+	}
+	d, err := parentFe.GenerateDigest(nil)
+	if err != nil {
+		return err
+	}
+	parentFe.Digest = d
 	return nil
 }
 

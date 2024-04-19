@@ -184,5 +184,23 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 		return nil, fmt.Errorf("unexpected error type=%v", dirEntry.Type)
 	}
 
+	data := []byte{}
+	if dirEntry.IsFile() {
+		f, err := os.Open(newFilePath)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+
+		data, err = io.ReadAll(f)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err := dirEntry.Verify(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify %s(%d, %d): %v", newFilePath, dirEntry.Type, dirEntry.Size, err)
+	}
+
 	return hardlinks, nil
 }
