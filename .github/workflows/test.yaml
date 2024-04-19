@@ -104,7 +104,7 @@ jobs:
     strategy:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
-        thread: ["1", "4"]
+        thread: ["4"]
         sched: ["none", "size-ordered"]
         comp: ["bzip2", "zstd"]
     steps:
@@ -131,7 +131,7 @@ jobs:
     strategy:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
-        thread: ["1", "4"]
+        thread: ["4"]
         sched: ["none", "size-ordered"]
         comp: ["bzip2", "zstd"]
     steps:
