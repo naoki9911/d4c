@@ -48,6 +48,8 @@ with open(sys.argv[2]) as f:
             continue
         if pathLabel != "di3fs":
             continue
+        if labels["count"] != "0":
+            continue
         tag = "{}:{}-{}".format(imageName, old, new)
         entryType = files[tag][path]
 

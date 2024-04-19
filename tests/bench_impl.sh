@@ -92,7 +92,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 			fi
 			set -u
 
-			$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER stat diff --benchmark --pathALabel native --pathBLabel di3fs $UPPER /tmp/fuse
+			$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER stat diff --benchmark --pathALabel native --pathBLabel di3fs --count 5 $UPPER /tmp/fuse
 		fi
 		fusermount3 -u /tmp/fuse
 	done

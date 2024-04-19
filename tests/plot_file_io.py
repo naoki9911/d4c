@@ -23,6 +23,8 @@ with open(sys.argv[1]) as f:
         # ignore 0-bytes file
         if fileSize == 0:
             continue
+        if labels["count"] != "0":
+            continue
         elapsedUS = r["elapsedMicroseconds"]
         tag = "{}".format(pathLabel)
         if tag not in stat_open:

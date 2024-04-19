@@ -46,6 +46,10 @@ func (b *Benchmark) SetDefaultLabels(l map[string]string) {
 	b.defaultLabels = l
 }
 
+func (b *Benchmark) SetLabel(k, v string) {
+	b.defaultLabels[k] = v
+}
+
 func (b *Benchmark) Close() error {
 	err := b.logFile.Close()
 	if err != nil {

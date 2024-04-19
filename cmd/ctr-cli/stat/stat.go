@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
@@ -103,6 +104,11 @@ func diffCommand() *cli.Command {
 				Required: false,
 				Value:    "pathB",
 			},
+			&cli.IntFlag{
+				Name:     "count",
+				Required: false,
+				Value:    1,
+			},
 		},
 	}
 
@@ -134,7 +140,15 @@ func diffAction(c *cli.Context) error {
 	}
 
 	defer fmt.Println("done")
-	return diffImpl(pathA, pathB, pm, b, c.String("pathALabel"), c.String("pathBLabel"), pathA, pathB)
+	for i := 0; i < c.Int("count"); i++ {
+		b.SetLabel("count", strconv.Itoa(i))
+		err = diffImpl(pathA, pathB, pm, b, c.String("pathALabel"), c.String("pathBLabel"), pathA, pathB)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func doBoth[T, U any](pathA, pathB T, f func(path T) (U, error)) (U, U, error) {
