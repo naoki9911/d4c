@@ -54,8 +54,14 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	}
 	defer diffFile.Close()
 
-	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc, pm)
+	diffTmpFile, err := os.CreateTemp("", "*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(diffTmpFile.Name())
+	defer diffTmpFile.Close()
+
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, diffTmpFile, isBinaryDiff, dc, pm)
 	if err != nil {
 		return err
 	}
@@ -67,7 +73,11 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 		FileEntry:       newDimg.header.FileEntry,
 	}
 
-	err = WriteDimg(diffFile, &header, &diffOut)
+	_, err = diffTmpFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+	err = WriteDimg(diffFile, &header, diffTmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to write dimg: %v", err)
 	}
@@ -96,8 +106,14 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 	}
 	defer diffCdimg.Close()
 
-	diffOut := bytes.Buffer{}
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, &diffOut, isBinaryDiff, dc, pm)
+	diffTmpFile, err := os.CreateTemp("", "*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(diffTmpFile.Name())
+	defer diffTmpFile.Close()
+
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, diffTmpFile, isBinaryDiff, dc, pm)
 	if err != nil {
 		return err
 	}
@@ -109,7 +125,12 @@ func GenerateDiffFromCdimg(oldCdimgPath, newCdimgPath, diffCdimgPath string, isB
 		CompressionMode: dc.CompressionMode,
 		FileEntry:       newDimg.header.FileEntry,
 	}
-	err = WriteDimg(&diffDimgOut, &header, &diffOut)
+
+	_, err = diffTmpFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+	err = WriteDimg(&diffDimgOut, &header, diffTmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to write dimg: %v", err)
 	}
@@ -186,9 +207,9 @@ func (dq *diffTaskQueue) Close() {
 	}
 }
 
-func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffBody *bytes.Buffer, isBinaryDiff bool, dc DiffConfig, pm *bsdiffx.PluginManager) error {
-	diffTasks := make(chan diffTask, 1000)
-	writeTasks := make(chan diffTask, 1000)
+func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEntry *FileEntry, diffWriter io.Writer, isBinaryDiff bool, dc DiffConfig, pm *bsdiffx.PluginManager) error {
+	diffTasks := make(chan diffTask, 10)
+	writeTasks := make(chan diffTask, 10)
 	wg := sync.WaitGroup{}
 
 	diffTaskQueue := newDiffTaskQueue()
@@ -250,13 +271,16 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 		diffCount := 0
 		newCount := 0
 		sameCount := 0
+		offset := int64(0)
 		for {
 			wt, more := <-writeTasks
 			if !more {
 				break
 			}
-			wt.newEntry.Offset = int64(diffBody.Len())
-			_, err := diffBody.Write(wt.data)
+			len := int64(len(wt.data))
+			wt.newEntry.Offset = offset
+			_, err := diffWriter.Write(wt.data)
+			offset += len
 			if err != nil {
 				logger.Errorf("failed to write to diffBody: %v", err)
 				return
@@ -301,6 +325,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 				if !more {
 					break
 				}
+				//logger.Infof("[thread %d] diffTask %s size=%d", threadId, dt.newEntry.Name, dt.newEntry.Size)
 
 				if dt.oldEntry == nil {
 					dt.data = make([]byte, dt.newEntry.CompressedSize)

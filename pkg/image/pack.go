@@ -21,7 +21,7 @@ type packTask struct {
 	data  *bytes.Buffer
 }
 
-func packDirImplMultithread(dirPath string, layer v1.Layer, outDirEntry *FileEntry, outBody *bytes.Buffer, threadNum int) error {
+func packDirImplMultithread(dirPath string, layer v1.Layer, outDirEntry *FileEntry, outWriter io.Writer, threadNum int) error {
 	compressTasks := make(chan packTask, 1000)
 	writeTasks := make(chan packTask, 1000)
 	wg := sync.WaitGroup{}
@@ -55,18 +55,21 @@ func packDirImplMultithread(dirPath string, layer v1.Layer, outDirEntry *FileEnt
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		offset := int64(0)
 		logger.Info("started pack write thread")
 		for {
 			wt, more := <-writeTasks
 			if !more {
 				break
 			}
-			wt.entry.Offset = int64(outBody.Len())
-			_, err := io.Copy(outBody, wt.data)
+			wt.entry.Offset = offset
+			len := int64(wt.data.Len())
+			_, err := io.Copy(outWriter, wt.data)
 			if err != nil {
 				logger.Errorf("failed to copy to outBody: %v", err)
 				return
 			}
+			offset += len
 		}
 		logger.Info("finished pack write thread")
 	}()
@@ -343,14 +346,26 @@ func PackDir(dirPath, outDimgPath string, threadNum int) error {
 	}
 	defer outDimg.Close()
 
-	outBody := bytes.Buffer{}
-	err = packDirImplMultithread(dirPath, nil, entry, &outBody, threadNum)
+	outTmpFile, err := os.CreateTemp("", "*")
 	if err != nil {
 		return err
 	}
-	//jsonBytes, _ := json.MarshalIndent(entry, " ", " ")
-	//fmt.Println(string(jsonBytes))
-	bodyDigest := digest.FromBytes(outBody.Bytes())
+	defer os.Remove(outTmpFile.Name())
+	defer outTmpFile.Close()
+
+	err = packDirImplMultithread(dirPath, nil, entry, outTmpFile, threadNum)
+	if err != nil {
+		return err
+	}
+	_, err = outTmpFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
+	bodyDigest, err := digest.FromReader(outTmpFile)
+	if err != nil {
+		return err
+	}
 
 	header := DimgHeader{
 		Id:        bodyDigest,
@@ -358,7 +373,11 @@ func PackDir(dirPath, outDimgPath string, threadNum int) error {
 		FileEntry: *entry,
 	}
 
-	err = WriteDimg(outDimg, &header, &outBody)
+	_, err = outTmpFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+	err = WriteDimg(outDimg, &header, outTmpFile)
 	if err != nil {
 		return fmt.Errorf("faield to write dimg: %v", err)
 	}

@@ -68,6 +68,7 @@ func dimgCommand() *cli.Command {
 			diff.DimgCommand(),
 			merge.DimgCommand(),
 			show.DimgCommand(),
+			pack.PackDimgCommand(),
 		},
 	}
 	return &cmd

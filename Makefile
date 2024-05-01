@@ -21,6 +21,7 @@ fuse-diff:
 
 plugins:
 	go build -buildmode=plugin -o plugin_basic.so ./cmd/plugins/basic/main.go
+	go build -buildmode=plugin -o plugin_xdelta3.so ./cmd/plugins/xdelta3/main.go
 
 clean:
 	rm -f snapshotter ctr-cli server fuse-diff plugin_gz.so

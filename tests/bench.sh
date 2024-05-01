@@ -22,7 +22,7 @@ mkdir -p /tmp/benchmark
 #THREADS=("1" "8")
 TESTS=("apache" "mysql" "nginx" "postgres" "redis")
 #SCHED_MODES=("none" "size-ordered")
-SCHED_MODES=("size-ordered")
+SCHED_MODES=("none")
 #COMP_MODES=("bzip2" "zstd")
 COMP_MODES=("bzip2")
 for TEST in "${TESTS[@]}"; do

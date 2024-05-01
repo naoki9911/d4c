@@ -271,6 +271,7 @@ func runMain(isChild bool, readyFd *os.File) error {
 		}
 	}
 	server.Wait()
+	os.RemoveAll(di3fsRoot.PatchedFilesDir)
 
 	return nil
 }

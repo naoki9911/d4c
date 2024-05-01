@@ -51,6 +51,7 @@ for ((i=0; i < ${#IMAGE_VERSIONS[@]}; i++));do
 		mv ./image-$IMAGE/image.dimg $IMAGE.dimg
 		$BIN_CTR_CLI dimg patch --outDir=./$IMAGE-base-patched --diffDimg=./$IMAGE.dimg
 		diff -r $IMAGE $IMAGE-base-patched --no-dereference
+		rm -rf $IMAGE-base-patched
 	fi
 done
 
@@ -76,13 +77,13 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_$DIFF_NAME.dimg --benchmark
 	done
 	diff -r $UPPER $UPPER-patched --no-dereference
+	rm -rf $UPPER-patched
 
 	# mount with di3fs
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_FUSE --label=$LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
-		sleep 1
+		$BIN_FUSE --label=$LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER --daemon --parentDimg=./$LOWER.dimg --diffDimg=./diff_$DIFF_NAME.dimg --benchmark=true /tmp/fuse
 		if [ $j -eq 0 ]; then
 			# invalidate file and page cache
 			# some environments (e.g. GHA) does not allow to modify this value
@@ -111,6 +112,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	ls -l diff_file_$DIFF_NAME.dimg
 	$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg patch --baseDir=./$LOWER --outDir=./$UPPER-patched --diffDimg=./diff_file_$DIFF_NAME.dimg
 	diff -r $UPPER $UPPER-patched --no-dereference
+	rm -rf $UPPER-patched
 done
 
 MERGE_LOWER=$IMAGE_LOWER-$IMAGE_MIDDLE
@@ -125,9 +127,9 @@ done
 echo "Testing merged $MERGED"
 $BIN_CTR_CLI dimg patch --baseDir=./$IMAGE_LOWER --outDir=./$IMAGE_UPPER-merged --diffDimg=./diff_merged_$MERGED.dimg
 diff -r $IMAGE_UPPER $IMAGE_UPPER-merged --no-dereference
+rm -rf $IMAGE_UPPER-merged
 ls -l diff_merged_$MERGED.dimg
-$BIN_FUSE --parentDimg=./$IMAGE_LOWER.dimg --diffDimg=./diff_merged_$MERGED.dimg /tmp/fuse >/dev/null 2>&1 &
-sleep 1
+$BIN_FUSE --daemon --parentDimg=./$IMAGE_LOWER.dimg --diffDimg=./diff_merged_$MERGED.dimg /tmp/fuse
 diff -r $IMAGE_UPPER /tmp/fuse --no-dereference
 fusermount3 -u /tmp/fuse
 

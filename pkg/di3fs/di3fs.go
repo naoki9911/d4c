@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/klauspost/compress/zstd"
@@ -22,13 +25,17 @@ type Di3fsNodeID uint64
 type Di3fsNode struct {
 	fs.Inode
 
-	path     string
-	linkNum  uint32
-	meta     *image.FileEntry
-	baseMeta []*image.FileEntry
-	data     []byte
-	root     *Di3fsRoot
-	plugin   *bsdiffx.Plugin
+	path      string
+	linkNum   uint32
+	openCount int
+	openLock  sync.Mutex
+
+	meta            *image.FileEntry
+	baseMeta        []*image.FileEntry
+	patchedFile     *os.File
+	patchedFilePath string
+	root            *Di3fsRoot
+	plugin          *bsdiffx.Plugin
 }
 
 var _ = (fs.NodeGetattrer)((*Di3fsNode)(nil))
@@ -36,6 +43,7 @@ var _ = (fs.NodeOpener)((*Di3fsNode)(nil))
 var _ = (fs.NodeReader)((*Di3fsNode)(nil))
 var _ = (fs.NodeReaddirer)((*Di3fsNode)(nil))
 var _ = (fs.NodeReadlinker)((*Di3fsNode)(nil))
+var _ = (fs.FileReleaser)((*Di3fsNode)(nil))
 
 func (dn *Di3fsNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	log.Traceln("Getattr started")
@@ -106,8 +114,16 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 }
 
 func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
-	if len(dn.data) != 0 {
+	if dn.patchedFile != nil {
+	} else if dn.patchedFilePath != "" {
+		file, err := os.Open(dn.patchedFilePath)
+		if err != nil {
+			log.Errorf("failed to open existing patched file %s: %v", dn.patchedFilePath, err)
+			return 0, 0, syscall.EIO
+		}
+		dn.patchedFile = file
 	} else {
+		var dataReader io.Reader
 		if dn.meta.IsNew() {
 			patchBytes := make([]byte, dn.meta.CompressedSize)
 			_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
@@ -122,18 +138,14 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 				return 0, 0, syscall.EIO
 			}
 			defer patchReader.Close()
-			dn.data, err = io.ReadAll(patchReader)
-			if err != nil {
-				log.Errorf("failed to read with zstd Reader err=%s", err)
-				return 0, 0, syscall.EIO
-			}
+			dataReader = patchReader
 		} else if dn.meta.IsSame() {
 			data, err := dn.readBaseFiles()
 			if err != nil {
 				log.Errorf("failed to read from base: %v", err)
 				return 0, 0, syscall.EIO
 			}
-			dn.data = data
+			dataReader = bytes.NewReader(data)
 		} else {
 			var patchReader io.Reader
 			patchBytes := make([]byte, dn.meta.CompressedSize)
@@ -154,23 +166,64 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 				log.Errorf("Open failed(bsdiff) err=%v", err)
 				return 0, 0, syscall.EIO
 			}
-			dn.data = newBytes
+			dataReader = bytes.NewReader(newBytes)
 			log.Debugf("Successfully patched %s", dn.meta.Name)
 		}
 
-		err := dn.meta.Verify(dn.data)
+		data, err := io.ReadAll(dataReader)
+		if err != nil {
+			log.Errorf("failed to read all: %v", err)
+			return 0, 0, syscall.EIO
+		}
+		err = dn.meta.Verify(data)
 		if err != nil {
 			log.Errorf("failed to verify %s(%d): %v", dn.path, dn.meta.Type, err)
 			return 0, 0, syscall.EIO
 		}
+
+		dn.patchedFile, err = os.CreateTemp(dn.root.PatchedFilesDir, fmt.Sprintf("%s-*", dn.meta.Name))
+		if err != nil {
+			log.Errorf("failed to creat temporary file: %v", err)
+			return 0, 0, syscall.EIO
+		}
+		_, err = dn.patchedFile.Write(data)
+		if err != nil {
+			log.Errorf("failed to write data: %v", err)
+			return 0, 0, syscall.EIO
+		}
+		dn.patchedFilePath = dn.patchedFile.Name()
 	}
 	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
 }
 
 func (dn *Di3fsNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	dn.openLock.Lock()
+	defer dn.openLock.Unlock()
+
+	defer func() {
+		dn.openCount += 1
+	}()
+
 	log.Traceln("Open started")
 	defer log.Traceln("Open finished")
-	return dn.openFileInImage()
+	if dn.openCount == 0 {
+		return dn.openFileInImage()
+	}
+
+	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
+}
+
+func (dn *Di3fsNode) Release(ctx context.Context) syscall.Errno {
+	dn.openLock.Lock()
+	defer dn.openLock.Unlock()
+
+	dn.openCount -= 1
+	if dn.openCount == 0 {
+		// close patched file
+		dn.patchedFile.Close()
+		dn.patchedFile = nil
+	}
+	return 0
 }
 
 func (dn *Di3fsNode) Read(ctx context.Context, f fs.FileHandle, data []byte, off int64) (fuse.ReadResult, syscall.Errno) {
@@ -179,12 +232,14 @@ func (dn *Di3fsNode) Read(ctx context.Context, f fs.FileHandle, data []byte, off
 
 	end := int64(off) + int64(len(data))
 	log.Debugf("READ STARTED file=%s offset=%d len=%d", dn.meta.Name, off, len(data))
-
-	if end > int64(len(dn.data)) {
-		end = int64(len(dn.data))
+	defer log.Debugf("READ FINISHED file=%s offset=%d len=%d", dn.meta.Name, off, (end - off))
+	length := end - off
+	readLen, err := dn.patchedFile.ReadAt(data[0:length], off)
+	if err != nil && err != io.EOF {
+		log.Errorf("failed to read from patched file: %v", err)
+		return nil, syscall.EIO
 	}
-	log.Debugf("READ FINISHED file=%s offset=%d len=%d", dn.meta.Name, off, (end - off))
-	return fuse.ReadResultData(dn.data[off:end]), 0
+	return fuse.ReadResultData(data[0:readLen]), 0
 }
 
 func (dn *Di3fsNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
@@ -277,13 +332,14 @@ type hardlinkNode struct {
 }
 
 type Di3fsRoot struct {
-	baseImageFiles []*image.DimgFile
-	diffImageFile  *image.DimgFile
-	RootNode       *Di3fsNode
-	inodes         map[string]*fs.Inode
-	nodes          map[string]*Di3fsNode
-	hardlinks      []*hardlinkNode
-	pm             *bsdiffx.PluginManager
+	baseImageFiles  []*image.DimgFile
+	diffImageFile   *image.DimgFile
+	RootNode        *Di3fsNode
+	inodes          map[string]*fs.Inode
+	nodes           map[string]*Di3fsNode
+	hardlinks       []*hardlinkNode
+	pm              *bsdiffx.PluginManager
+	PatchedFilesDir string
 }
 
 func (dr *Di3fsRoot) IsBase() bool {
@@ -296,16 +352,18 @@ func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *D
 		p = root.pm.GetPluginByExt(filepath.Ext(fe.Name))
 	}
 	node := &Di3fsNode{
-		linkNum:  1,
-		meta:     fe,
-		baseMeta: baseFE,
-		root:     root,
-		plugin:   p,
+		openCount: 0,
+		openLock:  sync.Mutex{},
+		linkNum:   1,
+		meta:      fe,
+		baseMeta:  baseFE,
+		root:      root,
+		plugin:    p,
 	}
 	return node
 }
 
-func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile, pm *bsdiffx.PluginManager) (Di3fsRoot, error) {
+func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile, pm *bsdiffx.PluginManager) (*Di3fsRoot, error) {
 	baseFEs := make([]*image.FileEntry, 0)
 	for i := range baseImages {
 		if baseImages[i] == nil {
@@ -313,17 +371,26 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 		}
 		baseFEs = append(baseFEs, &baseImages[i].DimgHeader().FileEntry)
 	}
-	rootNode := newNode(&diffImage.DimgHeader().FileEntry, baseFEs, nil)
-	root := Di3fsRoot{
-		baseImageFiles: baseImages,
-		diffImageFile:  diffImage,
-		RootNode:       rootNode,
-		inodes:         map[string]*fs.Inode{},
-		nodes:          map[string]*Di3fsNode{},
-		hardlinks:      []*hardlinkNode{},
-		pm:             pm,
+	dirUuid, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
 	}
-	rootNode.root = &root
+	rootNode := newNode(&diffImage.DimgHeader().FileEntry, baseFEs, nil)
+	root := &Di3fsRoot{
+		baseImageFiles:  baseImages,
+		diffImageFile:   diffImage,
+		RootNode:        rootNode,
+		inodes:          map[string]*fs.Inode{},
+		nodes:           map[string]*Di3fsNode{},
+		hardlinks:       []*hardlinkNode{},
+		pm:              pm,
+		PatchedFilesDir: filepath.Join(os.TempDir(), fmt.Sprintf("di3fs-%s", dirUuid.String())),
+	}
+	err = os.MkdirAll(root.PatchedFilesDir, 0644)
+	if err != nil {
+		return nil, err
+	}
+	rootNode.root = root
 
 	return root, nil
 }
@@ -388,6 +455,9 @@ func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 	fmt.Printf("elapsed = %v\n", (time.Since(start).Milliseconds()))
 	mountDone <- true
 	server.Wait()
+
+	os.RemoveAll(di3fsRoot.PatchedFilesDir)
+	log.Infof("patched files dir %s has been cleanuuped", di3fsRoot.PatchedFilesDir)
 
 	return nil
 }

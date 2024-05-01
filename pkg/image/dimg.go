@@ -107,7 +107,7 @@ func (df *DimgFile) ReadAt(b []byte, off int64) (int, error) {
 	return df.file.ReadAt(b, df.bodyOffset+off)
 }
 
-func WriteDimg(outDimg io.Writer, header *DimgHeader, body *bytes.Buffer) error {
+func WriteDimg(outDimg io.Writer, header *DimgHeader, body io.Reader) error {
 	jsonBytes, err := json.Marshal(header)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ImageHeader: %v", err)

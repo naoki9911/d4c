@@ -62,3 +62,44 @@ func Command() *cli.Command {
 
 	return &cmd
 }
+
+func PackDimgCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:  "pack",
+		Usage: "pack dir into dimg",
+		Action: func(context *cli.Context) error {
+			return packDimgAction(context)
+		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "in",
+				Usage:    "path to packed dir",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "out",
+				Usage:    "output digm path",
+				Required: true,
+			},
+			&cli.IntFlag{
+				Name:     "threadNum",
+				Usage:    "the number of thread",
+				Required: false,
+				Value:    8,
+			},
+		},
+	}
+	return cmd
+}
+
+func packDimgAction(c *cli.Context) error {
+	inPath := c.String("in")
+	outPath := c.String("out")
+	threadNum := c.Int("threadNum")
+	err := image.PackDir(inPath, outPath, threadNum)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

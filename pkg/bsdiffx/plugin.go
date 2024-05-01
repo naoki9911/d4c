@@ -32,9 +32,16 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 		return nil, err
 	}
 	basicPlugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_basic.so")
+	xdelta3Plugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_xdelta3.so")
+	_ = xdelta3Plugin
 	mgr := &PluginManager{
 		defaultPlugin: DefaultPluigin(),
 		plugins: []PluginEntry{
+			{
+				Name: "xdelta3",
+				Path: xdelta3Plugin,
+				Ext:  "",
+			},
 			{
 				Name: "basic",
 				Path: basicPlugin,
@@ -75,6 +82,9 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 func (pm *PluginManager) GetPluginByExt(ext string) *Plugin {
 	for i := range pm.plugins {
 		pe := pm.plugins[i]
+		if pe.Ext == "" {
+			return pe.p
+		}
 		if pe.Ext == ext {
 			return pe.p
 		}

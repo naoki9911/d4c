@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/containerd/containerd/log"
 	di3fsImage "github.com/naoki9911/fuse-diff-containerd/pkg/image"
@@ -112,7 +113,7 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("root required")
 	}
 
-	imageSquashed := image + "-squashed"
+	imageSquashed := strings.Replace(image, "/", "-", -1) + "-squashed"
 	imageSquashedPath := filepath.Join(workDir, imageSquashed+".tar")
 	imageDir := filepath.Join(workDir, image)
 
