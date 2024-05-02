@@ -105,8 +105,9 @@ jobs:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
         thread: ["4"]
-        sched: ["none", "size-ordered"]
+        sched: ["none"]
         comp: ["bzip2", "zstd"]
+        encoding: ["bsdiffx", "xdelta3"]
     steps:
       - uses: actions/checkout@v4
       - name: setup lxd
@@ -122,7 +123,7 @@ jobs:
       - name: launch lxc container
         run: ./tests/launch_test_lxc.sh test-export
       - name: run benchmark (${{ matrix.script }})
-        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && RUNNER=GHA sudo -E /home/ubuntu/d4c/tests/bench_single.sh benchmark benchmark/images ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }}"
+        run: sudo lxc exec test -- sudo --login --user ubuntu /bin/bash -c "sleep 3 && RUNNER=GHA sudo -E /home/ubuntu/d4c/tests/bench_single.sh benchmark benchmark/images ${{ matrix.script }} ${{ matrix.thread }} ${{ matrix.sched }} ${{ matrix.comp }} ${{ matrix.encoding }}"
 
   benchmark-cdimg:
     runs-on: ubuntu-22.04

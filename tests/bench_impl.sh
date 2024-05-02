@@ -13,6 +13,7 @@ RUN_NUM=$3
 THREAD_NUM=${4:-1}
 SCHED_MODE=${5:-"none"}
 COMP_MODE=$6
+DELTA_ENCODING=$7
 
 source $TEST_SCRIPT
 
@@ -25,7 +26,7 @@ function err() {
 
 trap err ERR
 
-LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME"
+LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME,deltaEncoding:$DELTA_ENCODING"
 
 IMAGE_DIR=$IMAGE_DIR/$IMAGE_NAME
 mkdir -p $IMAGE_DIR
@@ -58,13 +59,13 @@ done
 for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	LOWER=${IMAGE_VERSIONS[i]}
 	UPPER=${IMAGE_VERSIONS[$(expr $i + 1)]}
-	DIFF_NAME=$LOWER-$UPPER
+	DIFF_NAME=$LOWER-$UPPER-$DELTA_ENCODING
 
 	# generating diff data with binary-diff
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_$DIFF_NAME.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
+		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:binary-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_$DIFF_NAME.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE --deltaEncoding $DELTA_ENCODING
 	done
 
 	# packing diff data
@@ -102,7 +103,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark diff $DIFF_NAME file-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
+		$BIN_CTR_CLI --labels $LABELS,old:$LOWER,new:$UPPER,mode:file-diff,out:$LOWER-$UPPER dimg diff --oldDimg=./$LOWER.dimg --newDimg=./$UPPER.dimg --outDimg=./diff_file_$DIFF_NAME.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE --deltaEncoding $DELTA_ENCODING
 	done
 
 	# collect file sizes comparing file-delta and binary-delta
@@ -115,9 +116,9 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	rm -rf $UPPER-patched
 done
 
-MERGE_LOWER=$IMAGE_LOWER-$IMAGE_MIDDLE
-MERGE_UPPER=$IMAGE_MIDDLE-$IMAGE_UPPER
-MERGED=$IMAGE_LOWER-$IMAGE_UPPER
+MERGE_LOWER=$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING
+MERGE_UPPER=$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING
+MERGED=$IMAGE_LOWER-$IMAGE_UPPER-$DELTA_ENCODING
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark merge $MERGE_LOWER and $MERGE_UPPER to $MERGED ($NOW_COUNT/$RUN_NUM)"
@@ -136,14 +137,14 @@ fusermount3 -u /tmp/fuse
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED binary-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:binary-diff,out:$IMAGE_LOWER-$IMAGE_UPPER dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_$MERGED.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
+	$BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:binary-diff,out:$IMAGE_LOWER-$IMAGE_UPPER dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_$MERGED.dimg --mode=binary-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE --deltaEncoding $DELTA_ENCODING
 done
 ls -l diff_$MERGED.dimg
 
 for ((j=0; j < $RUN_NUM; j++));do
 	NOW_COUNT=$(expr $j + 1)
 	echo "Benchmark regen-diff $MERGED file-diff ($NOW_COUNT/$RUN_NUM)"
-	$BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:file-diff,out:$IMAGE_LOWER-$IMAGE_UPPER dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_file_$MERGED.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE
+	$BIN_CTR_CLI --labels $LABELS,old:$IMAGE_LOWER,new:$IMAGE_UPPER,mode:file-diff,out:$IMAGE_LOWER-$IMAGE_UPPER dimg diff --oldDimg=./$IMAGE_LOWER.dimg --newDimg=./$IMAGE_UPPER.dimg --outDimg=./diff_file_$MERGED.dimg --mode=file-diff --benchmark --threadNum $THREAD_NUM --threadSchedMode $SCHED_MODE --compressionMode $COMP_MODE --deltaEncoding $DELTA_ENCODING
 done
 ls -l diff_file_$MERGED.dimg
 

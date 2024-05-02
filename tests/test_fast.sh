@@ -19,11 +19,14 @@ IMAGE_DIR=$RESULT_DIR/images
 mkdir -p $IMAGE_DIR
 mkdir -p /tmp/benchmark
 
-#TESTS=("apache" "mysql" "nginx" "postgres" "redis")
+TESTS=("apache" "mysql" "nginx" "postgres" "redis")
+ENCODINGS=("bsdiffx" "xdelta3")
 #TESTS=("pytorch" "tensorflow")
-TESTS=("pytorch")
+#TESTS=("pytorch")
 for TEST in "${TESTS[@]}"; do
-	./bench_single.sh $RESULT_DIR $IMAGE_DIR $TEST 8 "none" "bzip2"
+	for ENCODING in "${ENCODINGS[@]}"; do
+		./bench_single.sh $RESULT_DIR $IMAGE_DIR $TEST 8 "none" "bzip2" $ENCODING
+	done
 done
 
 cat $RESULT_DIR/$TEST-benchmark.log >> /tmp/benchmark/benchmark.log

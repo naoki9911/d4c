@@ -160,5 +160,9 @@ func Compare(a, b []byte) bool {
 	return bytes.Equal(a, b)
 }
 
+func ID() uuid.UUID {
+	return uuid.MustParse("c4e21629-5937-49d2-9646-b93df8e04b5d")
+}
+
 func init() {
 }

@@ -18,7 +18,7 @@ with open(sys.argv[1]) as f:
             continue
         labels = r["labels"]
         name = "{}-{}".format(labels["imageName"], labels["out"])
-        valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
+        valueName = "th-{}-sched-{}-comp-{}-enc-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"], labels["deltaEncoding"])
         if name not in merge_time:
             merge_time[name] = {}
             merge_size[name] = {}
@@ -37,7 +37,7 @@ with open(sys.argv[1]) as f:
         name = "{}-{}".format(labels["imageName"], labels["out"])
         if name not in merge_time:
             continue
-        valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
+        valueName = "th-{}-sched-{}-comp-{}-enc-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"], labels["deltaEncoding"])
         if name not in binary_diff_time:
             binary_diff_time[name] = {}
             binary_diff_size[name] = {}
@@ -46,11 +46,10 @@ with open(sys.argv[1]) as f:
 
 labels = []
 for th in ["1", "8"]:
-    for sched in ["size-ordered"]:
-        if th == "1" and sched != "none":
-            continue
+    for sched in ["none"]:
         for comp in ["bzip2"]:
-            labels.append("th-{}-sched-{}-comp-{}".format(th, sched, comp))
+            for enc in ["bsdiffx", "xdelta3"]:
+                labels.append("th-{}-sched-{}-comp-{}-enc-{}".format(th, sched, comp, enc))
 
 plt.rcParams["figure.figsize"] = (10,10)
 fig, ax = plt.subplots(nrows=4, ncols=1, sharex=True)

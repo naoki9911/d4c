@@ -21,7 +21,8 @@ with open(sys.argv[1]) as f:
         imageName = labels["imageName"]
         new = labels["new"]
         old = labels["old"]
-        tag = "{}:{}-{}".format(imageName, old, new)
+        enc = labels["deltaEncoding"]
+        tag = "{}:{}-{}-{}".format(imageName, old, new, enc)
         if tag not in files:
             files[tag] = {}
         files[tag][path] = entryType
@@ -43,6 +44,7 @@ with open(sys.argv[2]) as f:
         root = labels["root"]
         path = path.replace(root, '', 1)
         pathLabel = labels["pathLabel"]
+        enc = labels["deltaEncoding"]
         # ignore 0-bytes file
         if fileSize == 0:
             continue
@@ -50,10 +52,14 @@ with open(sys.argv[2]) as f:
             continue
         if labels["count"] != "0":
             continue
-        tag = "{}:{}-{}".format(imageName, old, new)
+        tag = "{}:{}-{}-{}".format(imageName, old, new, enc)
         entryType = files[tag][path]
 
-        tag = "EntryType {}".format(fe_types[entryType])
+        if entryType == 2:
+            tag = "EntryType {} ({})".format(fe_types[entryType], enc)
+        else:
+            tag = "EntryType {}".format(fe_types[entryType])
+
         elapsedUS = r["elapsedMicroseconds"]
         if tag not in stat_open:
             # [path, fileSize, efficiency]

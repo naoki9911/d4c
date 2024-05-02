@@ -78,6 +78,12 @@ func DimgCommand() *cli.Command {
 				Value:    "bzip2",
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "deltaEncoding",
+				Usage:    "algorithm for delta encoding (bsdiffx, xdelta3, mixted)",
+				Value:    "bsdiffx",
+				Required: false,
+			},
 		},
 	}
 
@@ -133,6 +139,7 @@ func dimgAction(c *cli.Context) error {
 		CompressionMode:  compMode,
 		BenchmarkPerFile: enableBenchPerFile,
 		Benchmarker:      b,
+		DeltaEncoding:    c.String("deltaEncoding"),
 	}
 	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc, pm)
 	if err != nil {
@@ -224,6 +231,12 @@ func CdimgCommand() *cli.Command {
 				Value:    "bzip2",
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "deltaEncoding",
+				Usage:    "algorithm for delta encoding (bsdiffx, xdelta3, mixted)",
+				Value:    "bsdiffx",
+				Required: false,
+			},
 		},
 	}
 
@@ -279,6 +292,7 @@ func cdimgAction(c *cli.Context) error {
 		CompressionMode:  compMode,
 		BenchmarkPerFile: enableBenchPerFile,
 		Benchmarker:      b,
+		DeltaEncoding:    c.String("deltaEncoding"),
 	}
 	err = image.GenerateDiffFromCdimg(oldCdimg, newCdimg, outCdimg, mode == ModeDiffBinary, dc, pm)
 	if err != nil {

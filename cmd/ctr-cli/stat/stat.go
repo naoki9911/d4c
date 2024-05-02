@@ -1,6 +1,7 @@
 package stat
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -257,8 +258,7 @@ func diffImpl(pathA, pathB string, pm *bsdiffx.PluginManager, b *benchmark.Bench
 			return fmt.Errorf("failed to open and readall %s: %v", pathB, err)
 		}
 
-		p := pm.GetPluginByExt(filepath.Ext(pathA))
-		if !p.Compare(fileA, fileB) {
+		if !bytes.Equal(fileA, fileB) {
 			return fmt.Errorf("unmatched content %s and %s", fileA, fileB)
 		}
 

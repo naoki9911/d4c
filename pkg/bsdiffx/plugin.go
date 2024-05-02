@@ -17,6 +17,7 @@ type PluginEntry struct {
 	Uuid uuid.UUID `json:"uuid"`
 	Path string    `json:"path"`
 	Ext  string    `json:"ext"`
+	Size int       `json:"size"`
 
 	p *Plugin `json:"-"`
 }
@@ -31,8 +32,8 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	basicPlugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_basic.so")
 	xdelta3Plugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_xdelta3.so")
+	bsdiffxPlugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_bsdiffx.so")
 	_ = xdelta3Plugin
 	mgr := &PluginManager{
 		defaultPlugin: DefaultPluigin(),
@@ -40,12 +41,11 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 			{
 				Name: "xdelta3",
 				Path: xdelta3Plugin,
-				Ext:  "",
+				Size: 512 * 1024 * 1024, // handle more than 512 MiB file
 			},
 			{
-				Name: "basic",
-				Path: basicPlugin,
-				Ext:  ".xz",
+				Name: "bsdiffx",
+				Path: bsdiffxPlugin,
 			},
 		},
 	}
@@ -57,6 +57,7 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 				return nil, fmt.Errorf("failed to open %s (%s): %v", pe.Name, pe.Path, err)
 			}
 			pe.p = p
+			pe.Uuid = p.ID()
 		}
 		return mgr, nil
 	}
@@ -82,15 +83,45 @@ func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 func (pm *PluginManager) GetPluginByExt(ext string) *Plugin {
 	for i := range pm.plugins {
 		pe := pm.plugins[i]
-		if pe.Ext == "" {
-			return pe.p
-		}
 		if pe.Ext == ext {
 			return pe.p
 		}
 	}
 
 	return pm.defaultPlugin
+}
+
+func (pm *PluginManager) GetPluginByName(name string) *Plugin {
+	for i := range pm.plugins {
+		pe := pm.plugins[i]
+		if pe.Name == name {
+			return pe.p
+		}
+	}
+
+	return nil
+}
+
+func (pm *PluginManager) GetPluginBySize(size int) *Plugin {
+	for i := range pm.plugins {
+		pe := pm.plugins[i]
+		if size > pe.Size {
+			return pe.p
+		}
+	}
+
+	return pm.defaultPlugin
+}
+
+func (pm *PluginManager) GetPluginByUuid(uuid uuid.UUID) *Plugin {
+	for i := range pm.plugins {
+		pe := pm.plugins[i]
+		if pe.Uuid == uuid {
+			return pe.p
+		}
+	}
+
+	return nil
 }
 
 type Plugin struct {
@@ -100,6 +131,7 @@ type Plugin struct {
 	patch   func(oldBytes []byte, patchReader io.Reader) ([]byte, error)
 	merge   func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error
 	compare func(a, b []byte) bool
+	id      func() uuid.UUID
 }
 
 func defaultPluginInfo() string {
@@ -163,6 +195,12 @@ func OpenPlugin(path string) (*Plugin, error) {
 	}
 	plugin.compare = sCompare.(func(a, b []byte) bool)
 
+	sID, err := p.Lookup("ID")
+	if err != nil {
+		return nil, err
+	}
+	plugin.id = sID.(func() uuid.UUID)
+
 	return plugin, nil
 }
 
@@ -184,4 +222,8 @@ func (p *Plugin) Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) err
 
 func (p *Plugin) Compare(a, b []byte) bool {
 	return p.compare(a, b)
+}
+
+func (p *Plugin) ID() uuid.UUID {
+	return p.id()
 }

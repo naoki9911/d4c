@@ -30,10 +30,11 @@ SERVER_HOST=$4
 THREAD_NUM=$5
 SCHED_MODE=$6
 COMP_MODE=$7
+DELTA_ENCODING=$8
 
 source $TEST_SCRIPT
 
-LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME"
+LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME,deltaEncoding:$DELTA_ENCODING"
 
 ctr image rm $IMAGE_NAME:$IMAGE_LOWER
 ctr image rm $IMAGE_NAME:$IMAGE_MIDDLE
@@ -59,17 +60,17 @@ sleep 2
 
 $BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_LOWER/config.json --dimg $IMAGE_PATH/$IMAGE_LOWER.dimg --out $IMAGE_PATH/$IMAGE_LOWER.cdimg
 $BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/$IMAGE_MIDDLE.cdimg
-$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
-$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg --out $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg
-$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.dimg --out $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
-$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.dimg --out $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.dimg --out $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.dimg --out $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_MIDDLE/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.dimg --out $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.cdimg
+$BIN_CTR_CLI pack --config $IMAGE_PATH/image-$IMAGE_UPPER/config.json --dimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.dimg --out $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.cdimg
 
 curl -XDELETE http://$SERVER_HOST/cleanup
 
 $BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_LOWER.cdimg --imageTag $IMAGE_NAME:$IMAGE_LOWER
 $BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_MIDDLE.cdimg --imageTag $IMAGE_NAME:$IMAGE_MIDDLE
-$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
-$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg --imageTag $IMAGE_NAME:$IMAGE_UPPER
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.cdimg
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.cdimg --imageTag $IMAGE_NAME:$IMAGE_UPPER
 
 $BIN_CTR_CLI pull --image $IMAGE_NAME:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do
@@ -103,8 +104,8 @@ curl -XDELETE http://$SERVER_HOST/cleanup
 
 $BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_LOWER.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_LOWER
 $BIN_CTR_CLI push --cdimg $IMAGE_PATH/$IMAGE_MIDDLE.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_MIDDLE
-$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE.cdimg
-$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_UPPER
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_LOWER-$IMAGE_MIDDLE-$DELTA_ENCODING.cdimg
+$BIN_CTR_CLI push --cdimg $IMAGE_PATH/diff_file_$IMAGE_MIDDLE-$IMAGE_UPPER-$DELTA_ENCODING.cdimg --imageTag $IMAGE_NAME-file:$IMAGE_UPPER
 
 $BIN_CTR_CLI pull --image $IMAGE_NAME-file:$IMAGE_MIDDLE --host $SERVER_HOST
 for ((j=0; j < $RUN_NUM; j++));do

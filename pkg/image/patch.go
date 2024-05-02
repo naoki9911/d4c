@@ -167,7 +167,7 @@ func applyPatchImpl(basePath, newPath string, dirEntry *FileEntry, img *DimgFile
 			return nil, err
 		}
 	} else if dirEntry.Type == FILE_ENTRY_FILE_DIFF {
-		p := pm.GetPluginByExt(filepath.Ext(dirEntry.Name))
+		p := pm.GetPluginByUuid(dirEntry.PluginUuid)
 		var patchReader io.Reader
 		logger.Debugf("applying diff to %q from image(offset=%d size=%d)", newFilePath, dirEntry.Offset, dirEntry.CompressedSize)
 		patchBytes := make([]byte, dirEntry.CompressedSize)

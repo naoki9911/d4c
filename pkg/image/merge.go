@@ -100,7 +100,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 					start := time.Now()
 					mode := ""
 					if mt.lowerEntry != nil && mt.upperEntry != nil {
-						p := pm.GetPluginByExt(filepath.Ext(mt.upperEntry.Name))
+						p := pm.GetPluginByUuid(mt.upperEntry.PluginUuid)
 						if mt.lowerEntry.Type == FILE_ENTRY_FILE_NEW && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
 							lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
 							upperBytes := make([]byte, mt.upperEntry.CompressedSize)
@@ -146,6 +146,9 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 							mt.data = mergeCompressed
 							mode = "apply"
 						} else if mt.lowerEntry.Type == FILE_ENTRY_FILE_DIFF && mt.upperEntry.Type == FILE_ENTRY_FILE_DIFF {
+							if mt.lowerEntry.PluginUuid != mt.upperEntry.PluginUuid {
+								panic(fmt.Sprintf("unmatched plugin lower %s upper %s", mt.lowerEntry.PluginUuid, mt.upperEntry.PluginUuid))
+							}
 							lowerBytes := make([]byte, mt.lowerEntry.CompressedSize)
 							upperBytes := make([]byte, mt.upperEntry.CompressedSize)
 							_, err := lowerImgFile.ReadAt(lowerBytes, mt.lowerEntry.Offset)

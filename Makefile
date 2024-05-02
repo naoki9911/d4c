@@ -20,7 +20,7 @@ fuse-diff:
 	go build -o fuse-diff ./cmd/fuse-diff
 
 plugins:
-	go build -buildmode=plugin -o plugin_basic.so ./cmd/plugins/basic/main.go
+	go build -buildmode=plugin -o plugin_bsdiffx.so ./cmd/plugins/bsdiffx/main.go
 	go build -buildmode=plugin -o plugin_xdelta3.so ./cmd/plugins/xdelta3/main.go
 
 clean:

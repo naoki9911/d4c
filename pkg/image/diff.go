@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -164,6 +163,7 @@ type DiffConfig struct {
 	CompressionMode  bsdiffx.CompressionMode
 	BenchmarkPerFile bool
 	Benchmarker      *benchmark.Benchmark
+	DeltaEncoding    string
 }
 
 func (dc *DiffConfig) Validate() error {
@@ -366,7 +366,16 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						continue
 					}
 					if len(oldBytes) > 0 && isBinaryDiff {
-						p := pm.GetPluginByExt(filepath.Ext(dt.newEntry.Name))
+						var p *bsdiffx.Plugin = nil
+						switch dc.DeltaEncoding {
+						case "mixed":
+							p = pm.GetPluginBySize(dt.newEntry.Size)
+						default:
+							p = pm.GetPluginByName(dc.DeltaEncoding)
+						}
+						if p == nil {
+							panic(fmt.Sprintf("unknown delta encoding %s", dc.DeltaEncoding))
+						}
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
@@ -378,6 +387,7 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						dt.newEntry.Type = FILE_ENTRY_FILE_DIFF
 						dt.newEntry.CompressedSize = int64(diffWriter.Len())
 						dt.data = diffWriter.Bytes()
+						dt.newEntry.PluginUuid = p.ID()
 					} else {
 						dt.newEntry.Type = FILE_ENTRY_FILE_NEW
 						dt.data = make([]byte, dt.newEntry.CompressedSize)

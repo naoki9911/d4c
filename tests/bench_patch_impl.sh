@@ -17,6 +17,7 @@ RUN_NUM=$3
 THREAD_NUM=$4
 SCHED_MODE=$5
 COMP_MODE=$6
+DELTA_ENCODING=$7
 
 source $TEST_SCRIPT
 
@@ -31,12 +32,12 @@ trap err ERR
 IMAGE_DIR=$IMAGE_DIR/$IMAGE_NAME
 cd $IMAGE_DIR
 
-LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME"
+LABELS="threadNum:$THREAD_NUM,threadSchedMode:$SCHED_MODE,compressionMode:$COMP_MODE,imageName:$IMAGE_NAME,deltaEncoding:$DELTA_ENCODING"
 
 for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	LOWER=${IMAGE_VERSIONS[i]}
 	UPPER=${IMAGE_VERSIONS[$(expr $i + 1)]}
-	DIFF_NAME=$LOWER-$UPPER
+	DIFF_NAME=$LOWER-$UPPER-$DELTA_ENCODING
 
 	# patching diff data
 	for ((j=0; j < $RUN_NUM; j++));do

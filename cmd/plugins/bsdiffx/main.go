@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 )
 
@@ -25,6 +26,10 @@ func Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 
 func Compare(a, b []byte) bool {
 	return bytes.Equal(a, b)
+}
+
+func ID() uuid.UUID {
+	return uuid.MustParse("2466ff1d-27f2-4cc5-a6ef-bf7de2b7a05f")
 }
 
 func init() {

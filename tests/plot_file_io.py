@@ -20,6 +20,9 @@ with open(sys.argv[1]) as f:
         new = labels["new"]
         old = labels["old"]
         pathLabel = labels["pathLabel"]
+        enc = labels["deltaEncoding"]
+        if enc != "bsdiffx":
+            continue
         # ignore 0-bytes file
         if fileSize == 0:
             continue

@@ -15,7 +15,7 @@ with open(sys.argv[1]) as f:
         r = json.loads(l)
         labels = r["labels"]
         if r["taskName"] == "diff-per-file":
-            name = "type-{}-comp-{}".format(labels["type"], labels["compressionMode"])
+            name = "type-{}-comp-{}-enc-{}".format(labels["type"], labels["compressionMode"], labels["deltaEncoding"])
             if name not in diff_time:
                 diff_time[name] = [[],[]]
                 diff_size[name] = [[], []]
@@ -25,7 +25,7 @@ with open(sys.argv[1]) as f:
             diff_size[name][1].append(int(labels["compressedSize"]))
 
             if labels["type"] == "file_diff" and "obj" in labels and labels["obj"] == "merge":
-                name = "mode-diff-comp-{}".format(labels["compressionMode"])
+                name = "mode-diff-comp-{}-enc-{}".format(labels["compressionMode"], labels["deltaEncoding"])
                 if name not in merge_time:
                     merge_time[name] = [[], []]
                 merge_time[name][0].append(r["size"])
@@ -35,7 +35,7 @@ with open(sys.argv[1]) as f:
             mode = labels["mergeMode"]
             if mode == "copy-upper" or mode == "copy-lower":
                 continue
-            name = "mode-{}-comp-{}".format(mode, labels["compressionMode"])
+            name = "mode-{}-comp-{}-enc-{}".format(mode, labels["compressionMode"], labels["deltaEncoding"])
             if name not in merge_time:
                 merge_time[name] = [[], []]
             merge_time[name][0].append(r["size"])

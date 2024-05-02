@@ -21,10 +21,11 @@ with open(sys.argv[1]) as f:
         # file maybe FILE_SAME, it must be ignored
         fileDiffSize = r["fileEntryACompressionSize"]
         binaryDiffSize = r["fileEntryBCompressionSize"]
+        encoding = labels["deltaEncoding"]
         if fileSize == 0 or binaryDiffSize == 0 or fileDiffSize == 0:
             continue
         efficiency = float(binaryDiffSize) / float(fileDiffSize)
-        tag = "{}:{}-{}".format(imageName, old, new)
+        tag = "{}:{}-{}-{}".format(imageName, old, new, encoding)
         if tag not in compare:
             # [path, fileSize, efficiency]
             compare[tag] = [[], [], []]

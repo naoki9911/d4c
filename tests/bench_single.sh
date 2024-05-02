@@ -13,6 +13,7 @@ TEST=$3
 THREAD_NUM=$4
 SCHED_MODE=$5
 COMP_MODE=$6
+DELTA_ENCODING=$7
 
 PATH=$PATH:/usr/local/go/bin
 
@@ -25,9 +26,9 @@ mkdir -p $RESULT_DIR
 mkdir -p $IMAGE_DIR
 
 echo "Benchmarking $TEST thread=$THREAD_NUM sched=$SCHED_MODE comp=$COMP_MODE"
-./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE
-./bench_patch_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE
-./bench_pull_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM localhost:8081 $THREAD_NUM $SCHED_MODE $COMP_MODE
+./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
+./bench_patch_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
+./bench_pull_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM localhost:8081 $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
 cat $IMAGE_DIR/$TEST/benchmark.log >> ./$RESULT_DIR/$TEST-benchmark.log
 mv $IMAGE_DIR/$TEST/benchmark-io.log ./$RESULT_DIR/$TEST-benchmark-io.log
 mv $IMAGE_DIR/$TEST/compare.log ./$RESULT_DIR/$TEST-compare.log

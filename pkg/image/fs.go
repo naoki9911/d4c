@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/klauspost/compress/zstd"
 	"github.com/opencontainers/go-digest"
 )
@@ -82,6 +83,7 @@ type FileEntry struct {
 	CompressedSize int64         `json:"compressedSize,omitempty"`
 	Offset         int64         `json:"offset,omitempty"`
 	Digest         digest.Digest `json:"digest"`
+	PluginUuid     uuid.UUID     `json:"pluginUuid"`
 }
 
 func (fe *FileEntry) DeepCopy() *FileEntry {

@@ -14,7 +14,7 @@ with open(sys.argv[1]) as f:
         labels = r["labels"]
         if r["taskName"] == "patch" or r["taskName"] == "di3fs":
             name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
-            valueName = "{}-comp-{}".format(r["taskName"], labels["compressionMode"])
+            valueName = "{}-comp-{}-enc-{}".format(r["taskName"], labels["compressionMode"], labels["deltaEncoding"])
             if name not in mount_time:
                 mount_time[name] = {}
             mount_time[name][valueName] = r["elapsedMilliseconds"]
@@ -23,7 +23,8 @@ with open(sys.argv[1]) as f:
 labels = []
 for task in ["patch", "di3fs"]:
     for comp in ["bzip2"]:
-        labels.append("{}-comp-{}".format(task, comp))
+        for enc in ["bsdiffx", "xdelta3"]:
+            labels.append("{}-comp-{}-enc-{}".format(task, comp, enc))
 
 plt.rcParams["figure.figsize"] = (20,10)
 fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True)

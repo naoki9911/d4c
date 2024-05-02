@@ -18,7 +18,7 @@ with open(sys.argv[1]) as f:
             continue
         labels = r["labels"]
         name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
-        valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
+        valueName = "th-{}-sched-{}-comp-{}-enc-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"], labels["deltaEncoding"])
         if labels["mode"] == "binary-diff":
             if name not in binary_pull_time:
                 binary_pull_time[name] = {}
@@ -37,7 +37,7 @@ with open(sys.argv[1]) as f:
             continue
         labels = r["labels"]
         name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
-        valueName = "th-{}-sched-{}-comp-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"])
+        valueName = "th-{}-sched-{}-comp-{}-enc-{}".format(labels["threadNum"], labels["threadSchedMode"], labels["compressionMode"], labels["deltaEncoding"])
         if labels["mode"] == "binary-diff":
             if name not in binary_download_time:
                 binary_download_time[name] = {}
@@ -51,11 +51,10 @@ with open(sys.argv[1]) as f:
 
 labels = []
 for th in ["1", "8"]:
-    for sched in ["size-ordered"]:
-        if th == "1" and sched != "none":
-            continue
+    for sched in ["none"]:
         for comp in ["bzip2"]:
-            labels.append("th-{}-sched-{}-comp-{}".format(th, sched, comp))
+            for enc in ["bsdiffx", "xdelta3"]:
+                labels.append("th-{}-sched-{}-comp-{}-enc-{}".format(th, sched, comp, enc))
 
 plt.rcParams["figure.figsize"] = (20,10)
 fig, ax = plt.subplots(nrows=4, ncols=1, sharex=True)

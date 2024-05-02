@@ -348,8 +348,11 @@ func (dr *Di3fsRoot) IsBase() bool {
 
 func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *Di3fsNode {
 	var p *bsdiffx.Plugin = nil
-	if root != nil {
-		p = root.pm.GetPluginByExt(filepath.Ext(fe.Name))
+	if root != nil && fe.Type == image.FILE_ENTRY_FILE_DIFF {
+		p = root.pm.GetPluginByUuid(fe.PluginUuid)
+		if p == nil {
+			panic(fmt.Sprintf("plugin for %s not found", fe.PluginUuid))
+		}
 	}
 	node := &Di3fsNode{
 		openCount: 0,
