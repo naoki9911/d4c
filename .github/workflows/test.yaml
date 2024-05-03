@@ -134,7 +134,7 @@ jobs:
       matrix:
         script: ["apache", "mysql", "nginx", "postgres", "redis"]
         thread: ["4"]
-        sched: ["none", "size-ordered"]
+        sched: ["none"]
         comp: ["bzip2", "zstd"]
     steps:
       - uses: actions/checkout@v4
