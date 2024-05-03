@@ -20,7 +20,8 @@ mkdir -p $IMAGE_DIR
 mkdir -p /tmp/benchmark
 
 TESTS=("apache" "mysql" "nginx" "postgres" "redis")
-ENCODINGS=("bsdiffx" "xdelta3")
+#ENCODINGS=("bsdiffx" "xdelta3")
+ENCODINGS=("xdelta3")
 #TESTS=("pytorch" "tensorflow")
 #TESTS=("pytorch")
 for TEST in "${TESTS[@]}"; do

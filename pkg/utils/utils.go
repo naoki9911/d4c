@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/opencontainers/go-digest"
@@ -111,7 +110,6 @@ var (
 )
 
 func randSequence(n int) string {
-	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = letters[rand.Intn(len(letters))]

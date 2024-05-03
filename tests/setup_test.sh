@@ -28,7 +28,11 @@ echo "===== Prepare ====="
 
   sudo apt-get update
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dbus-user-session docker-ce containerd.io fuse3 python3 python3-pip jq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git build-essential automake # for xdelta3
   sudo pip3 install docker-squash matplotlib
+
+  git clone https://github.com/naoki9911/go-xdelta
+  cd go-xdelta && git checkout v0.0.3 && ./build_install.sh
 
   systemctl --user start dbus
 

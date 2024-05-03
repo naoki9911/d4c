@@ -77,7 +77,7 @@ for ((i=0; i < $(expr ${#IMAGE_VERSIONS[@]} - 1); i++));do
 	for ((j=0; j < $RUN_NUM; j++));do
 		NOW_COUNT=$(expr $j + 1)
 		echo "Benchmark di3fs $DIFF_NAME binary-diff ($NOW_COUNT/$RUN_NUM)"
-		$BIN_FUSE --parentCdimg=./$LOWER.cdimg --diffCdimg=./diff_$DIFF_NAME.cdimg --benchmark=true /tmp/fuse >/dev/null 2>&1 &
+		$BIN_FUSE --daemon --parentCdimg=./$LOWER.cdimg --diffCdimg=./diff_$DIFF_NAME.cdimg --benchmark=true /tmp/fuse
 		sleep 1
 		if [ $j -eq 0 ]; then
 			diff -r $UPPER /tmp/fuse --no-dereference
@@ -111,7 +111,7 @@ echo "Testing merged $MERGED"
 $BIN_CTR_CLI cdimg patch --baseDir=./$IMAGE_LOWER --outDir=./$IMAGE_UPPER-merged --diffCdimg=./diff_merged_$MERGED.cdimg
 diff -r $IMAGE_UPPER $IMAGE_UPPER-merged --no-dereference
 ls -l diff_merged_$MERGED.cdimg
-$BIN_FUSE --parentCdimg=./$IMAGE_LOWER.cdimg --diffCdimg=./diff_merged_$MERGED.cdimg /tmp/fuse >/dev/null 2>&1 &
+$BIN_FUSE --daemon --parentCdimg=./$IMAGE_LOWER.cdimg --diffCdimg=./diff_merged_$MERGED.cdimg /tmp/fuse
 sleep 1
 diff -r $IMAGE_UPPER /tmp/fuse --no-dereference
 fusermount3 -u /tmp/fuse

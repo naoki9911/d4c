@@ -28,8 +28,7 @@ require (
 
 replace github.com/icedream/go-bsdiff v1.0.1 => github.com/naoki9911/go-bsdiff v1.0.3
 
-//replace github.com/nine-lives-later/go-xdelta v0.3.2-0.20200813195159-a23b3640ca1a => github.com/naoki9911/go-xdelta v0.0.1
-replace github.com/nine-lives-later/go-xdelta v0.3.2-0.20200813195159-a23b3640ca1a => ../go-xdelta
+replace github.com/nine-lives-later/go-xdelta v0.3.2-0.20200813195159-a23b3640ca1a => github.com/naoki9911/go-xdelta v0.0.2
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
@@ -59,7 +58,6 @@ require (
 	github.com/opencontainers/selinux v1.10.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/ulikunitz/xz v0.5.12 // indirect
 	github.com/vbatts/tar-split v0.11.3 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
