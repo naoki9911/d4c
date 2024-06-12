@@ -109,7 +109,7 @@ func dimgAction(c *cli.Context) error {
 
 	var b *benchmark.Benchmark = nil
 	if enableBench || enableBenchPerFile {
-		b, err = benchmark.NewBenchmark("./benchmark.log")
+		b, err = benchmark.NewBenchmark("./benchmark-merge.log")
 		if err != nil {
 			return err
 		}
@@ -292,7 +292,7 @@ func cdimgAction(c *cli.Context) error {
 
 	var b *benchmark.Benchmark = nil
 	if enableBench || enableBenchPerFile {
-		b, err = benchmark.NewBenchmark("./benchmark.log")
+		b, err = benchmark.NewBenchmark("./benchmark-merge.log")
 		if err != nil {
 			return err
 		}
@@ -309,6 +309,7 @@ func cdimgAction(c *cli.Context) error {
 	var header *image.DimgHeader
 	start := time.Now()
 
+	mergedCdimgsNum := 2
 	if cdimgs != "" {
 		dimgEntry := []*image.DimgEntry{}
 		for _, path := range strings.Split(cdimgs, ",") {
@@ -324,6 +325,7 @@ func cdimgAction(c *cli.Context) error {
 		}
 		// reverse entries into upperN, upperN-1, ..., lower
 		slices.Reverse(dimgEntry)
+		mergedCdimgsNum = len(dimgEntry)
 
 		start = time.Now()
 		tmpDir := filepath.Join("/tmp/d4c", utils.GetRandomId("merge-tmp"))
@@ -375,6 +377,7 @@ func cdimgAction(c *cli.Context) error {
 			Labels: map[string]string{
 				"lowerCdimg":             lowerCdimg,
 				"upperCdimg":             upperCdimg,
+				"mergedCdimgsNum":        strconv.Itoa(mergedCdimgsNum),
 				"outCdimg":               outCdimg,
 				"threadNum":              strconv.Itoa(threadNum),
 				"compressionMode":        bsdiffx.CompressionModeToString(header.CompressionMode),

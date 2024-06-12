@@ -27,6 +27,26 @@ type PluginManager struct {
 	plugins       []PluginEntry
 }
 
+func GetBsdiffxPlugin() (*Plugin, error) {
+	d4cBinPath, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	bsdiffxPlugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_bsdiffx.so")
+
+	return OpenPlugin(bsdiffxPlugin)
+}
+
+func GetXdelta3Plugin() (*Plugin, error) {
+	d4cBinPath, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	xdelta3Plugin := filepath.Join(filepath.Dir(d4cBinPath), "plugin_xdelta3.so")
+
+	return OpenPlugin(xdelta3Plugin)
+}
+
 func LoadOrDefaultPlugins(path string) (*PluginManager, error) {
 	d4cBinPath, err := os.Executable()
 	if err != nil {

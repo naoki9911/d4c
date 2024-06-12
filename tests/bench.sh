@@ -19,8 +19,10 @@ IMAGE_DIR=$RESULT_DIR/images
 mkdir -p $IMAGE_DIR
 mkdir -p /tmp/benchmark
 
-TESTS=("apache" "mysql" "nginx" "postgres" "redis")
-THREADS=("1" "8")
+#TESTS=("apache" "mysql" "nginx" "postgres" "redis")
+TESTS=("nginx" "postgres" "redis")
+#THREADS=("1" "8")
+THREADS=("8")
 SCHED_MODES=("none")
 COMP_MODES=("bzip2")
 ENCODINGS=("bsdiffx" "xdelta3")

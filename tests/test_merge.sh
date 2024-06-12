@@ -52,6 +52,17 @@ function diff_image() {
     echo $DIFF_NAME
 }
 
+convert_image 1.20.1
+convert_image 1.20.2
+convert_image 1.21.0
+convert_image 1.21.1
+convert_image 1.21.3
+convert_image 1.21.4
+convert_image 1.21.5
+convert_image 1.21.6
+convert_image 1.22.0
+convert_image 1.22.1
+convert_image 1.23.0
 convert_image 1.23.1
 convert_image 1.23.2
 convert_image 1.23.3
@@ -63,23 +74,60 @@ convert_image 1.25.2
 convert_image 1.25.3
 convert_image 1.25.4
 
+RUN_NUM=2
 
-MERGED_CDIMGS=$(diff_image 1.23.1 1.23.2)
+MERGED_CDIMGS=$(diff_image 1.20.1 1.20.2)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.20.2 1.21.0)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.0 1.21.1)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.1 1.21.3) # 4
+for ((j=0; j < $RUN_NUM; j++)); do
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.3 1.21.4)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.4 1.21.5)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.5 1.21.6)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.21.6 1.22.0) #8
+for ((j=0; j < $RUN_NUM; j++)); do
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.22.0 1.22.1)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.22.1 1.23.0)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.0 1.23.1)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.1 1.23.2) # 12
+for ((j=0; j < $RUN_NUM; j++)); do
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.2 1.23.3)
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.3 1.23.4)
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.23.4 1.24.0)
-MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.24.0 1.25.0)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.24.0 1.25.0) # 16
+for ((j=0; j < $RUN_NUM; j++)); do
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.0 1.25.1)
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.1 1.25.2)
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.2 1.25.3)
-MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.3 1.25.4)
+MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.25.3 1.25.4) # 20
+for ((j=0; j < $RUN_NUM; j++)); do 
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
 
-$BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect
-rm -rf $IMAGE_DIR/1.25.4-patched
-mkdir $IMAGE_DIR/1.25.4-patched
+for ((j=0; j < $RUN_NUM; j++)); do
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode linear --benchmark
+    $BIN_CTR_CLI cdimg merge --cdimgs $MERGED_CDIMGS --outCdimg $IMAGE_DIR/merged.cdimg --threadNum 8 --mergeDimgConcurrentNum 4 --mergeMode bisect --benchmark
+done
 
-$BIN_CTR_CLI cdimg patch --baseDir $IMAGE_DIR/image-1.23.1 --outDir $IMAGE_DIR/1.25.4-patched --diffCdimg $IMAGE_DIR/1.23.1-1.25.4.cdimg
-diff -r --no-dereference $IMAGE_DIR/image-1.25.4 $IMAGE_DIR/1.25.4-patched
+rm -rf $IMAGE_DIR/merged-patched
+exit 0
+mkdir $IMAGE_DIR/merged-patched
+
+$BIN_CTR_CLI cdimg patch --baseDir $IMAGE_DIR/image-1.21.0 --outDir $IMAGE_DIR/merged-patched --diffCdimg $IMAGE_DIR/merged.cdimg
+diff -r --no-dereference $IMAGE_DIR/image-1.25.4 $IMAGE_DIR/merged-patched
 
 $BIN_CTR_CLI push --cdimg $IMAGE_DIR/1.23.1.cdimg --imageTag nginx:1.23.1
 $BIN_CTR_CLI push --cdimg $IMAGE_DIR/1.23.1-1.23.2.cdimg

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
@@ -46,25 +45,30 @@ func diffCommand() *cli.Command {
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "compressionMode",
-				Usage:    "Mode to compress diffs",
-				Value:    "bzip2",
-				Required: false,
+				Name:     "algorithm",
+				Usage:    "Algorithm to generate diff(bsdiffx or xdelta3)",
+				Required: true,
 			},
 		},
 		Action: func(c *cli.Context) error {
 			oldFilePath := c.String("old")
 			newFilePath := c.String("new")
 			diffFilePath := c.String("diff")
+			algorithm := c.String("algorithm")
 
-			pm, err := bsdiffx.LoadOrDefaultPlugins("")
-			if err != nil {
-				return err
+			var err error
+			var p *bsdiffx.Plugin
+			switch algorithm {
+			case "bsdiffx":
+				p, err = bsdiffx.GetBsdiffxPlugin()
+			case "xdelta3":
+				p, err = bsdiffx.GetXdelta3Plugin()
+			default:
+				return fmt.Errorf("algorithm must be bsdiffx or xdelta3")
 			}
-			p := pm.GetPluginByExt(filepath.Ext(newFilePath))
-			compMode, err := bsdiffx.GetCompressMode(c.String("compressionMode"))
+
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get plugin: %v", err)
 			}
 
 			diffFile, err := os.Create(diffFilePath)
@@ -91,7 +95,7 @@ func diffCommand() *cli.Command {
 				return err
 			}
 			defer newFile.Close()
-			err = p.Diff(oldBytes, newBytes, diffFile, compMode)
+			err = p.Diff(oldBytes, newBytes, diffFile, bsdiffx.CompressionModeBzip2)
 			if err != nil {
 				return err
 			}
@@ -106,7 +110,7 @@ func diffCommand() *cli.Command {
 func patchCommand() *cli.Command {
 	cmd := cli.Command{
 		Name:  "patch",
-		Usage: "generate patch with bsdiffx",
+		Usage: "patch diffs",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "old",
@@ -123,17 +127,32 @@ func patchCommand() *cli.Command {
 				Usage:    "diff file path",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "algorithm",
+				Usage:    "Algorithm to patch diff(bsdiffx or xdelta3)",
+				Required: true,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			oldFilePath := c.String("old")
 			newFilePath := c.String("new")
 			diffFilePath := c.String("diff")
+			algorithm := c.String("algorithm")
 
-			pm, err := bsdiffx.LoadOrDefaultPlugins("")
-			if err != nil {
-				return err
+			var err error
+			var p *bsdiffx.Plugin
+			switch algorithm {
+			case "bsdiffx":
+				p, err = bsdiffx.GetBsdiffxPlugin()
+			case "xdelta3":
+				p, err = bsdiffx.GetXdelta3Plugin()
+			default:
+				return fmt.Errorf("algorithm must be bsdiffx or xdelta3")
 			}
-			p := pm.GetPluginByExt(filepath.Ext(newFilePath))
+
+			if err != nil {
+				return fmt.Errorf("failed to get plugin: %v", err)
+			}
 
 			diffFile, err := os.Open(diffFilePath)
 			if err != nil {
@@ -156,7 +175,7 @@ func patchCommand() *cli.Command {
 func mergeCommand() *cli.Command {
 	cmd := cli.Command{
 		Name:  "merge",
-		Usage: "generate merge with bsdiffx",
+		Usage: "merge diffs",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "lower",
@@ -183,6 +202,11 @@ func mergeCommand() *cli.Command {
 				Usage:    "updated file path (for debug)",
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "algorithm",
+				Usage:    "Algorithm to merge diff(bsdiffx or xdelta3)",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			lower := c.String("lower")
@@ -190,12 +214,6 @@ func mergeCommand() *cli.Command {
 			out := c.String("out")
 			base := c.String("base")
 			updated := c.String("updated")
-
-			pm, err := bsdiffx.LoadOrDefaultPlugins("")
-			if err != nil {
-				return err
-			}
-			p := pm.GetPluginByExt(filepath.Ext(upper))
 
 			lowerFile, err := os.Open(lower)
 			if err != nil {
@@ -231,6 +249,19 @@ func mergeCommand() *cli.Command {
 					return fmt.Errorf("failed to DeltaMerging: %v", err)
 				}
 			} else {
+				algorithm := c.String("algorithm")
+				var p *bsdiffx.Plugin
+				switch algorithm {
+				case "bsdiffx":
+					p, err = bsdiffx.GetBsdiffxPlugin()
+				case "xdelta3":
+					p, err = bsdiffx.GetXdelta3Plugin()
+				default:
+					return fmt.Errorf("algorithm must be bsdiffx or xdelta3")
+				}
+				if err != nil {
+					return fmt.Errorf("failed to get plugin: %v", err)
+				}
 				err = p.Merge(lowerFile, upperFile, outFile)
 				if err != nil {
 					return fmt.Errorf("failed to DeltaMerging: %v", err)
