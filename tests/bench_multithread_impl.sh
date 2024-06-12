@@ -29,7 +29,7 @@ for ((i=0; i < ${#IMAGE_VERSIONS[@]}; i++));do
 		echo "base image for $IMAGE_NAME:$IMAGE already exists"
 	else
 		echo "Creating base image for $IMAGE_NAME:$IMAGE"
-		$BIN_CTR_CLI convert --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --threadNum 8
+		$BIN_CTR_CLI convert2 --image $DOCKER_IMAGE:$IMAGE --output ./image-$IMAGE --dimg --threadNum 8
 		mv ./image-$IMAGE/image.dimg $IMAGE.dimg
 	fi
 done

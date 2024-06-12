@@ -20,7 +20,7 @@ mkdir -p $IMAGE_DIR
 mkdir -p /tmp/benchmark
 
 #TESTS=("apache" "mysql" "nginx" "postgres" "redis")
-TESTS=("nginx" "postgres" "redis")
+TESTS=("nginx" "postgres" "redis" "pytorch")
 #THREADS=("1" "8")
 THREADS=("8")
 SCHED_MODES=("none")

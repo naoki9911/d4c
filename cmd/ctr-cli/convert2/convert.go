@@ -2,6 +2,7 @@ package convert2
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -55,6 +56,7 @@ var Flags = []cli.Flag{
 	&cli.BoolFlag{
 		Name:     "dimg",
 		Usage:    "output dimg image (Root required)",
+		Value:    true,
 		Required: false,
 	},
 	&cli.BoolFlag{
@@ -80,6 +82,8 @@ func action(c *cli.Context) error {
 	img := c.String("image")
 	OS := c.String("os")
 	arch := c.String("arch")
+	outputCdimg := c.Bool("cdimg")
+	threadNum := c.Int("threadNum")
 	puller, err := oci.NewPuller()
 	if err != nil {
 		return fmt.Errorf("failed to create puller: %v", err)
@@ -113,9 +117,37 @@ func action(c *cli.Context) error {
 		return fmt.Errorf("failed to copy layer: %v", err)
 	}
 
-	err = image.PackLayer(layer, filepath.Join(outputPath, "image.dimg"), 8)
+	configPath := filepath.Join(outputPath, "config.json")
+	configFile, err := os.Create(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to create config file: %v", err)
+	}
+	defer configFile.Close()
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %v", err)
+	}
+	_, err = configFile.Write(configBytes)
+	if err != nil {
+		return fmt.Errorf("failed to write config: %v", err)
+	}
+	err = configFile.Sync()
+	if err != nil {
+		return fmt.Errorf("failed to sync config file: %v", err)
+	}
+
+	dimgPath := filepath.Join(outputPath, "image.dimg")
+	err = image.PackLayer(layer, dimgPath, threadNum)
 	if err != nil {
 		return fmt.Errorf("failed to pack layer: %v", err)
 	}
+
+	if outputCdimg {
+		err = image.PackCdimg(configPath, dimgPath, filepath.Join(outputPath, "image.cdimg"))
+		if err != nil {
+			return fmt.Errorf("failed to pack cdimg: %v", err)
+		}
+	}
+
 	return nil
 }

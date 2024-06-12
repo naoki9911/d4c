@@ -26,7 +26,7 @@ function convert_image() {
     if [ -e $IMAGE_DIR/$IMAGE_VERSION.cdimg ]; then
         return
     fi
-    $BIN_CTR_CLI convert --image nginx:$IMAGE_VERSION --output $IMAGE_DIR/$IMAGE_VERSION --cdimg --threadNum $THREAD_NUM
+    $BIN_CTR_CLI convert2 --image nginx:$IMAGE_VERSION --output $IMAGE_DIR/$IMAGE_VERSION --cdimg --threadNum $THREAD_NUM
     mv $IMAGE_DIR/$IMAGE_VERSION/image.cdimg $IMAGE_DIR/$IMAGE_VERSION.cdimg
     mkdir $IMAGE_DIR/image-$IMAGE_VERSION
     tar -xf $IMAGE_DIR/$IMAGE_VERSION/layer.tar -C $IMAGE_DIR/image-$IMAGE_VERSION
