@@ -36,7 +36,10 @@ func CreateSnapshot(ctx context.Context, ss snapshots.Snapshotter, manifestDiges
 	randId := utils.GetRandomId("di3fs")
 	// ignore error
 	// TODO: handle this correctly
-	_ = ss.Remove(ctx, dimgId.String())
+	err := ss.Remove(ctx, dimgId.String())
+	if err != nil {
+		log.G(ctx).WithField("id", dimgId.String()).Warnf("failed to remove snapshot: %v", err)
+	}
 
 	mounts, err := ss.Prepare(ctx, randId, "", opts)
 	if err != nil {

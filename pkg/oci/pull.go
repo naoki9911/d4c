@@ -109,6 +109,20 @@ func (p *Puller) Pull(imageName string, os, arch string) (v1.Layer, *v1.ConfigFi
 	return layer, config, nil
 }
 
+func (p *Puller) Load(imagePath string, os, arch string) (v1.Layer, *v1.ConfigFile, error) {
+	img, err := tarball.ImageFromPath(imagePath, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open image %s: %v", imagePath, err)
+	}
+
+	layer, config, err := p.retrieveFlattenLayerFromImage(img, os, arch)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to flatten: %v", err)
+	}
+
+	return layer, config, nil
+}
+
 func (p *Puller) retrieveFlattenLayerFromIndex(idx v1.ImageIndex, OS, arch string) (v1.Layer, *v1.ConfigFile, error) {
 	im, err := idx.IndexManifest()
 	if err != nil {

@@ -116,10 +116,16 @@ func (f *Di3FSManager) Unmount(ctx context.Context, mountpoint string) error {
 		"mountpoint": mountpoint,
 	}).Info("DummyFS Unmount called")
 
+	if _, ok := f.mounts[mountpoint]; !ok {
+		log.G(ctx).Infof("mountpoint %s is not mounted with Di3FS", mountpoint)
+		return nil
+	}
+
 	delete(f.mounts, mountpoint)
+
 	err := exec.Command("fusermount3", "-u", mountpoint).Run()
 	if err != nil {
-		log.G(ctx).Errorf("failed to unmount %s", mountpoint)
+		log.G(ctx).WithError(err).Errorf("failed to unmount %s", mountpoint)
 		return err
 	}
 	return nil

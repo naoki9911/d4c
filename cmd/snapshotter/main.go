@@ -51,7 +51,7 @@ func unmountDi3FS() error {
 		di3fsMountPath := cols[2]
 		err = exec.Command("fusermount3", "-u", di3fsMountPath).Run()
 		if err != nil {
-			log.G(context.TODO()).Errorf("failed to unmount %s", di3fsMountPath)
+			log.G(context.TODO()).WithError(err).Errorf("failed to unmount %s", di3fsMountPath)
 			return err
 		}
 		log.G(context.TODO()).Infof("unmounted %s", di3fsMountPath)

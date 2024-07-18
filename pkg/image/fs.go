@@ -143,7 +143,7 @@ func (fe FileEntry) IsSame() bool {
 }
 
 func (fe FileEntry) IsLink() bool {
-	return fe.Type == FILE_ENTRY_SYMLINK
+	return fe.Type == FILE_ENTRY_SYMLINK || fe.Type == FILE_ENTRY_HARDLINK
 }
 func (fe FileEntry) IsFile() bool {
 	return fe.Type == FILE_ENTRY_FILE_DIFF ||

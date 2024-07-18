@@ -60,7 +60,8 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 	defer os.Remove(diffTmpFile.Name())
 	defer diffTmpFile.Close()
 
-	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, &newDimg.DimgHeader().FileEntry, diffTmpFile, isBinaryDiff, dc, pm)
+	newFE := newDimg.DimgHeader().FileEntry.DeepCopy()
+	err = generateDiffMultithread(oldDimg, newDimg, &oldDimg.DimgHeader().FileEntry, newFE, diffTmpFile, isBinaryDiff, dc, pm)
 	if err != nil {
 		return err
 	}
@@ -69,7 +70,7 @@ func GenerateDiffFromDimg(oldDimgPath, newDimgPath, diffDimgPath string, isBinar
 		Id:              newDimg.DimgHeader().Id,
 		ParentId:        oldDimg.DimgHeader().Id,
 		CompressionMode: dc.CompressionMode,
-		FileEntry:       newDimg.header.FileEntry,
+		FileEntry:       *newFE,
 	}
 
 	_, err = diffTmpFile.Seek(0, 0)
@@ -466,9 +467,12 @@ func enqueueDiffTaskToQueue(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEnt
 			return fmt.Errorf("invalid dimg")
 		}
 
-		if newChildEntry.IsLink() ||
-			newChildEntry.Size == 0 {
-			continue
+		if !newChildEntry.IsDir() {
+			// If the entry is not dir and link or 0-bytes file, the entry is reused.
+			if newChildEntry.IsLink() ||
+				newChildEntry.Size == 0 {
+				continue
+			}
 		}
 
 		// newly created file or directory

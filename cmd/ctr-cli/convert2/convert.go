@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/log"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/oci"
 	"github.com/sirupsen/logrus"
@@ -75,6 +76,11 @@ var Flags = []cli.Flag{
 		Value:    1,
 		Required: false,
 	},
+	&cli.BoolFlag{
+		Name:  "load",
+		Usage: "Load image tarball",
+		Value: false,
+	},
 }
 
 func action(c *cli.Context) error {
@@ -88,12 +94,22 @@ func action(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create puller: %v", err)
 	}
-	logger.WithFields(logrus.Fields{"image": img, "os": OS, "arch": arch}).Info("started to pull image")
-	layer, config, err := puller.Pull(img, OS, arch)
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %v", img, err)
+	var layer v1.Layer
+	var config *v1.ConfigFile
+	if c.Bool("load") {
+		logger.WithFields(logrus.Fields{"image": img, "os": OS, "arch": arch}).Info("started to load image")
+		layer, config, err = puller.Load(img, OS, arch)
+		if err != nil {
+			return fmt.Errorf("failed to load image %s: %v", img, err)
+		}
+	} else {
+		logger.WithFields(logrus.Fields{"image": img, "os": OS, "arch": arch}).Info("started to pull image")
+		layer, config, err = puller.Pull(img, OS, arch)
+		if err != nil {
+			return fmt.Errorf("failed to pull image %s: %v", img, err)
+		}
 	}
-	_ = config
+
 	uncompLayer, err := layer.Uncompressed()
 	if err != nil {
 		return fmt.Errorf("failed to get uncompressed layer: %v", err)

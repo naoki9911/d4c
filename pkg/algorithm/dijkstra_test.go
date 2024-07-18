@@ -45,4 +45,14 @@ func TestDijkstraWithMultipleGoals(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(via))
 	assert.Equal(t, "hoge3", via[0].GetName())
+
+	path, via, err = g.ShortestPathWithMultipleGoals("1.23.4", []string{"1.23.1", "1.23.3"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 2, len(path))
+	assert.Equal(t, "1.23.4", path[0].GetName())
+	assert.Equal(t, "1.23.3", path[1].GetName())
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(via))
+	assert.Equal(t, "hoge3", via[0].GetName())
 }

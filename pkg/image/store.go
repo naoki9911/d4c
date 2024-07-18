@@ -121,7 +121,7 @@ func (ds *DimgStore) GetDimgPathsWithDimgId(dimgId digest.Digest) ([]string, err
 	defer ds.storeLock.Unlock()
 
 	// start search from current Id towards baseId(="")
-	dimgs, err := ds.GetDimgEntriesWithDimgIds(dimgId, []digest.Digest{""})
+	dimgs, err := ds.getDimgEntriesWithDimgIds(dimgId, []digest.Digest{""})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dimgs: %v", err)
 	}
@@ -135,6 +135,13 @@ func (ds *DimgStore) GetDimgPathsWithDimgId(dimgId digest.Digest) ([]string, err
 }
 
 func (ds *DimgStore) GetDimgEntriesWithDimgIds(startDimgId digest.Digest, goalDimgIds []digest.Digest) ([]*DimgEntry, error) {
+	ds.storeLock.Lock()
+	defer ds.storeLock.Unlock()
+
+	return ds.getDimgEntriesWithDimgIds(startDimgId, goalDimgIds)
+}
+
+func (ds *DimgStore) getDimgEntriesWithDimgIds(startDimgId digest.Digest, goalDimgIds []digest.Digest) ([]*DimgEntry, error) {
 	goals := []string{}
 	for _, dimg := range goalDimgIds {
 		goals = append(goals, dimg.String())

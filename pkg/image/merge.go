@@ -548,9 +548,11 @@ func runMergeDimgTask(task *mergeDimgTask, tmpDir string, threadLimit chan struc
 			return
 		}
 
-		task.dimg = upperDimg
-		task.dimg.DimgHeader = *header
-		task.dimg.Path = mergedDimgPath
+		task.dimg = &DimgEntry{
+			DimgHeader:  *header,
+			Path:        mergedDimgPath,
+			ConfigBytes: append([]byte{}, upperDimg.ConfigBytes...),
+		}
 		task.done <- nil
 
 		<-threadLimit
