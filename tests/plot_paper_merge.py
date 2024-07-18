@@ -46,19 +46,24 @@ for th in ["8"]:
             for enc in [("xdelta3", "xdelta3"), ("bsdiffx", "bsdiff")]:
                 labels.append((("th-{}-sched-{}-comp-{}-enc-{}".format(th, sched, comp, enc[0])), enc[1]))
 
-plt.rcParams["figure.figsize"] = (9,4)
+plt.rcParams["figure.figsize"] = (10,4)
 plt.rcParams["font.size"] = 16
 fig, ax = plt.subplots(nrows=1, ncols=2, sharex=True)
-ax[0].set_ylabel("Time to generate (Seconds)")
+ax[0].set_ylabel("Time to merge (Seconds)")
+ax02 = ax[0].twinx()
+ax02.set_ylabel("Time to merge (Seconds, pytorch)", fontsize=13)
 ax[1].set_ylabel("Delta bundle size ratio\n(merge/diff)")
 #ax.set_title("diff_size")
 
 keys = list(merge_time.keys())
+print(keys)
 keys = []
 keys.append(("postgres-13.1-13.3", "postgres\n.1→.3"))
 keys.append(("nginx-1.23.1-1.23.3", "nginx\n.1→.3"))
 keys.append(("redis-7.0.5-7.0.7", "redis\n.5→.7"))
-keys.append(("redis-7.0.5-7.0.7", "redis\n.5→.7"))
+
+keys2 = []
+keys2.append(("pytorch-2.2.0-cuda12.1-cudnn8-runtime-2.2.2-cuda12.1-cudnn8-runtime", "pytorch\n.0→.2"))
 
 cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
@@ -69,8 +74,20 @@ for i, l in zip(range(0, data_num), labels):
     for k in keys:
         v = merge_time[k[0]][l[0]]
         value.append(sum(v) / len(v))
-    ax[0].bar([(x*factor + (int(x/1)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1], color=cycle[i+1])
+    p = ax[0].bar([(x*factor + (int(x/1)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1], color=cycle[i+1])
+    ax[0].bar_label(p, fmt="%.1f", fontsize=14, padding=2)
+ax[0].set_ylim(0, 4.5)
 
+for i, l in zip(range(0, data_num), labels):
+    value = []
+    for k in keys2:
+        v = merge_time[k[0]][l[0]]
+        value.append(sum(v) / len(v))
+    p = ax02.bar([(x*factor + (int(x/1)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(len(keys), len(keys) + len(keys2))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1], color=cycle[i+1])
+    ax02.bar_label(p, fmt="%.1f", fontsize=14, padding=2, rotation=90)
+ax02.set_ylim(0, 50)
+
+keys.extend(keys2)
 for i, l in zip(range(0, data_num), labels):
     value = []
     for k in keys:
@@ -79,7 +96,9 @@ for i, l in zip(range(0, data_num), labels):
         dv = diff_size[k[0]][l[0]]
         dv_avg = sum(dv) / len(dv)
         value.append(mv_avg/dv_avg)
-    ax[1].bar([(x*factor + (int(x/1)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1], color=cycle[i+1])
+    p = ax[1].bar([(x*factor + (int(x/1)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1], color=cycle[i+1])
+    ax[1].bar_label(p, fmt="%.1f", fontsize=14, padding=2)
+ax[1].set_ylim(0, 1.3)
 
 ax[0].legend()
 ax[0].tick_params()

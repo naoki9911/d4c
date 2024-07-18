@@ -1,0 +1,43 @@
+THE WORST REDUCED FILES
+path, reducedSize(bytes), ratio
+/usr/share/postgresql/13/man/man7/ALTER_POLICY.7.gz,-1373,2.108151735270379
+/usr/share/postgresql/13/man/man7/ALTER_OPERATOR.7.gz,-1362,2.0240601503759397
+/usr/share/postgresql/13/man/man7/CREATE_OPERATOR_FAMILY.7.gz,-1331,1.9582433405327573
+/usr/share/postgresql/13/man/man7/DROP_DATABASE.7.gz,-1312,2.0123456790123457
+/usr/share/postgresql/13/man/man7/DROP_INDEX.7.gz,-1309,1.907137907137907
+/usr/share/postgresql/13/man/man7/SET_SESSION_AUTHORIZATION.7.gz,-1304,1.8792987188132164
+/usr/share/postgresql/13/man/man7/CREATE_USER_MAPPING.7.gz,-1300,1.9027777777777777
+/usr/share/postgresql/13/man/man7/ALTER_SERVER.7.gz,-1298,1.9558173784977908
+/usr/share/postgresql/13/man/man7/MOVE.7.gz,-1289,2.014162077104642
+/usr/share/postgresql/13/man/man7/ALTER_TEXT_SEARCH_CONFIGURATION.7.gz,-1284,1.8548601864181091
+/usr/share/postgresql/13/man/man7/DISCARD.7.gz,-1275,2.0135135135135136
+/usr/share/postgresql/13/man/man7/ALTER_TABLESPACE.7.gz,-1272,1.9264384559359067
+/usr/share/postgresql/13/man/man7/CREATE_CONVERSION.7.gz,-1269,1.8155526992287918
+/usr/share/postgresql/13/man/man7/ALTER_USER_MAPPING.7.gz,-1253,1.909288824383164
+/usr/share/postgresql/13/man/man7/SAVEPOINT.7.gz,-1251,1.9697674418604652
+/usr/share/postgresql/13/man/man7/CREATE_LANGUAGE.7.gz,-1237,1.4785299806576402
+/usr/share/postgresql/13/man/man7/DROP_AGGREGATE.7.gz,-1232,1.827400940228341
+/usr/share/postgresql/13/man/man7/VALUES.7.gz,-1225,1.439225528863392
+/usr/share/postgresql/13/man/man7/IMPORT_FOREIGN_SCHEMA.7.gz,-1225,1.823806321452589
+/usr/lib/postgresql/13/lib/bitcode/sslinfo.index.bc,-1215,1.8741007194244603
+THE MOST REDUCED FILES
+/usr/lib/postgresql/13/bin/postgres,3305635,0.12099908713147886
+/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1,1367715,0.03217143758858573
+/usr/lib/x86_64-linux-gnu/libapt-pkg.so.5.0.2,812333,0.024737735581759988
+/lib/x86_64-linux-gnu/libsystemd.so.0.25.0,307566,0.0007082889298988902
+/usr/lib/postgresql/13/bin/psql,233662,0.09885303940700517
+/usr/lib/x86_64-linux-gnu/libssl.so.1.1,232840,0.06528249472103796
+/usr/share/locale/ja/LC_MESSAGES/postgres-13.mo,215590,0.0025815644835945743
+/usr/lib/x86_64-linux-gnu/libzstd.so.1.3.8,212438,0.24378027986515782
+/usr/share/locale/ru/LC_MESSAGES/postgres-13.mo,194961,0.16751284208189043
+/usr/lib/x86_64-linux-gnu/libapt-private.so.0.0.0,188768,0.001327908834561605
+/usr/lib/postgresql/13/lib/bitcode/postgres/utils/fmgrtab.bc,183821,0.0010814041951961743
+/usr/lib/postgresql/13/lib/utf8_and_gb18030.so,175714,0.0008131606930631138
+/usr/lib/postgresql/13/lib/bitcode/postgres/utils/misc/guc.bc,175155,0.05130857724722144
+/usr/share/locale/fr/LC_MESSAGES/postgres-13.mo,168501,0.20151545307213328
+/usr/lib/postgresql/13/bin/pg_dump,161275,0.10476386082554344
+/usr/lib/x86_64-linux-gnu/libldap_r-2.4.so.2.10.10,151575,0.0014230092693242682
+/usr/lib/x86_64-linux-gnu/libpq.so.5.13,142481,0.051808126921592375
+/usr/lib/postgresql/13/lib/bitcode/postgres/commands/tablecmds.bc,137555,0.20201996762946764
+/usr/lib/postgresql/13/lib/bitcode/postgres/parser/gram.bc,136875,0.4097875019404246
+/usr/share/locale/de/LC_MESSAGES/postgres-13.mo,129678,0.3710508191791718

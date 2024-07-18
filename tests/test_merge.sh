@@ -9,7 +9,6 @@ set -eu
 THREAD_NUM=8
 SERVER_HOST="localhost:8081"
 IMAGE_DIR="merge_images"
-IMAGE_DIR=$(cd $IMAGE_DIR; pwd)
 mkdir -p $IMAGE_DIR
 
 ROOT_DIR=$(cd $(dirname $0)/../; pwd)
@@ -74,7 +73,7 @@ convert_image 1.25.2
 convert_image 1.25.3
 convert_image 1.25.4
 
-RUN_NUM=2
+RUN_NUM=10
 
 MERGED_CDIMGS=$(diff_image 1.20.1 1.20.2)
 MERGED_CDIMGS=$MERGED_CDIMGS,$(diff_image 1.20.2 1.21.0)
@@ -124,6 +123,7 @@ done
 
 rm -rf $IMAGE_DIR/merged-patched
 exit 0
+
 mkdir $IMAGE_DIR/merged-patched
 
 $BIN_CTR_CLI cdimg patch --baseDir $IMAGE_DIR/image-1.21.0 --outDir $IMAGE_DIR/merged-patched --diffCdimg $IMAGE_DIR/merged.cdimg

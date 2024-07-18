@@ -37,7 +37,7 @@ with open(sys.argv[1]) as f:
         diff_time[d][int(labels["threadNum"])][task].append(r["elapsedMilliseconds"] / 1000)
 
 
-print(diff_time)
+#print(diff_time)
 threads = [1, 2, 4, 8]
 diff_time_agg = {}
 
@@ -51,7 +51,7 @@ for enc in diff_time.keys():
             diff_time_agg[l].append(sum(r) / len(r))
 print(diff_time_agg)
 
-plt.rcParams["figure.figsize"] = (5,6)
+plt.rcParams["figure.figsize"] = (5,5)
 plt.rcParams["font.size"] = 16
 fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True)
 ax.set_ylabel("Elapsed time (Seconds)")

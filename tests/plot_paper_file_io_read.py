@@ -13,7 +13,7 @@ with open(sys.argv[1]) as f:
     for l in f.readlines():
         r = json.loads(l)
         task = r["taskName"]
-        if task != "open":
+        if task != "read":
             continue
         labels = r["labels"]
         name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
@@ -29,7 +29,6 @@ with open(sys.argv[1]) as f:
 
         if labels["count"] != "0" and labels["count"] != "1":
                 continue
-
         cnts = ["first", "second"]
         d = ""
         if labels["pathLabel"] == "native":
@@ -58,5 +57,5 @@ for l in sorted(diff_time.keys()):
 plt.legend()
 plt.tight_layout()
 
-plt.savefig("eval-file-io-open.pdf")
-plt.savefig("eval-file-io-open.png", dpi=400)
+plt.savefig("eval-file-io-read.pdf")
+plt.savefig("eval-file-io-read.png", dpi=400)

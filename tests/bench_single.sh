@@ -6,7 +6,7 @@ if [ $EUID -ne 0 ]; then
 	exit 1
 fi
 
-RUN_NUM=1
+RUN_NUM=10
 RESULT_DIR=$1
 IMAGE_DIR=$2
 TEST=$3
@@ -28,8 +28,13 @@ mkdir -p $IMAGE_DIR
 echo "Benchmarking $TEST thread=$THREAD_NUM sched=$SCHED_MODE comp=$COMP_MODE"
 ./bench_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
 ./bench_patch_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
-./bench_pull_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM localhost:8081 $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
+#./bench_pull_impl.sh test_$TEST.sh $IMAGE_DIR $RUN_NUM localhost:8081 $THREAD_NUM $SCHED_MODE $COMP_MODE $DELTA_ENCODING
 cat $IMAGE_DIR/$TEST/benchmark.log >> ./$RESULT_DIR/$TEST-benchmark.log
-mv $IMAGE_DIR/$TEST/benchmark-io.log ./$RESULT_DIR/$TEST-benchmark-io.log
-mv $IMAGE_DIR/$TEST/compare.log ./$RESULT_DIR/$TEST-compare.log
+cat $IMAGE_DIR/$TEST/benchmark-merge.log >> ./$RESULT_DIR/$TEST-benchmark-merge.log
+cat $IMAGE_DIR/$TEST/benchmark-io.log >> ./$RESULT_DIR/$TEST-benchmark-io.log
+cat $IMAGE_DIR/$TEST/compare.log >> ./$RESULT_DIR/$TEST-compare.log
+
 rm $IMAGE_DIR/$TEST/benchmark.log
+rm $IMAGE_DIR/$TEST/benchmark-merge.log
+rm $IMAGE_DIR/$TEST/benchmark-io.log
+rm $IMAGE_DIR/$TEST/compare.log

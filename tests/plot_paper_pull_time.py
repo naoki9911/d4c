@@ -44,7 +44,8 @@ plt.rcParams["figure.figsize"] = (12,4)
 plt.rcParams["font.size"] = 16
 fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True)
 ax.set_ylabel("Time to pull (Seconds)")
-#ax.set_title("diff_size")
+ax2 = ax.twinx()
+ax2.set_ylabel("Time to pull (Seconds, pytorch)", fontsize=14)
 
 keys = list(pull_time.keys())
 keys = []
@@ -57,9 +58,11 @@ keys.append(("nginx-1.23.1-1.23.3", "\n.1→.3"))
 keys.append(("redis-7.0.5-7.0.6", "\n.5→.6"))
 keys.append(("redis-7.0.6-7.0.7", "redis\n.6→.7"))
 keys.append(("redis-7.0.5-7.0.7", "\n.5→.7"))
-keys.append(("redis-7.0.5-7.0.6", "\n.5→.6"))
-keys.append(("redis-7.0.6-7.0.7", "redis\n.6→.7"))
-keys.append(("redis-7.0.5-7.0.7", "\n.5→.7"))
+
+keys2 = []
+keys2.append(("pytorch-2.2.0-cuda12.1-cudnn8-runtime-2.2.1-cuda12.1-cudnn8-runtime", "\n.0→.1"))
+keys2.append(("pytorch-2.2.1-cuda12.1-cudnn8-runtime-2.2.2-cuda12.1-cudnn8-runtime", "pytorch\n.1→.2"))
+keys2.append(("pytorch-2.2.0-cuda12.1-cudnn8-runtime-2.2.2-cuda12.1-cudnn8-runtime", "\n.0→.2"))
 
 data_num = len(labels)
 factor = (data_num+0.5) * BAR_WIDTH
@@ -68,9 +71,21 @@ for i, l in zip(range(0, data_num), labels):
     for k in keys:
         v = pull_time[k[0]][l[0]]
         value.append(sum(v) / len(v))
-    ax.bar([(x*factor + (int(x/3)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1])
+    p = ax.bar([(x*factor + (int(x/3)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(0, len(keys))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1])
+    ax.bar_label(p, fmt="%.1f", fontsize=14, rotation=90, padding=2)
+ax.set_ylim(0, 8)
 
-ax.legend()
+for i, l in zip(range(0, data_num), labels):
+    value = []
+    for k in keys2:
+        v = pull_time[k[0]][l[0]]
+        value.append(sum(v) / len(v))
+    p = ax2.bar([(x*factor + (int(x/3)*BAR_WIDTH/3))+(BAR_WIDTH*i) for x in range(len(keys), len(keys) + len(keys2))], value, align="edge",  edgecolor="black", linewidth=1, width=BAR_WIDTH, label=l[1])
+    ax2.bar_label(p, fmt="%.1f", fontsize=14, rotation=90, padding=2)
+ax2.set_ylim(0, 190)
+
+keys.extend(keys2)
+ax.legend(loc='upper center')
 ax.tick_params()
 plt.xlim(0, (len(keys)-1)*factor+ (int((len(keys)-1)/3) * BAR_WIDTH/3)+BAR_WIDTH*data_num)
 plt.xticks([x*factor+ (int(x/3)*BAR_WIDTH/3) + BAR_WIDTH*data_num/2 for x in range(0, len(keys))], [x[1] for x in keys])

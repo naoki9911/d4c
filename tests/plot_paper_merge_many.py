@@ -31,13 +31,16 @@ for mode in ["linear", "bisect"]:
         rs = merge_time[mode][num]
         merge_time_agg[mode].append(sum(rs) / len(rs))
 
-plt.rcParams["figure.figsize"] = (5,6)
+labels = {}
+labels["linear"] = ["in-order"]
+labels["bisect"] = ["our method"]
+plt.rcParams["figure.figsize"] = (5,5)
 plt.rcParams["font.size"] = 16
 fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True)
 ax.set_ylabel("Time to merge (Seconds)")
 ax.set_xlabel("Number of merged delta bundles")
 for l in merge_time_agg:
-    ax.plot(mergedDimgs, merge_time_agg[l], marker="o", linestyle="dashed", label=l)
+    ax.plot(mergedDimgs, merge_time_agg[l], marker="o", linestyle="dashed", label=labels[l])
 
 cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
 plt.legend()
