@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 
@@ -23,6 +24,7 @@ func Command() *cli.Command {
 		Subcommands: []*cli.Command{
 			compareCommand(),
 			diffCommand(),
+			showCommand(),
 		},
 	}
 
@@ -282,4 +284,58 @@ func diffImpl(pathA, pathB string, pm *bsdiffx.PluginManager, b *benchmark.Bench
 
 	// ignore others
 	return nil
+}
+
+func showCommand() *cli.Command {
+	cmd := cli.Command{
+		Name:   "show",
+		Usage:  "show file stats in dimg or cdimg",
+		Action: showAction,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "img",
+				Usage:    "path to dimg or cdimg file",
+				Required: true,
+			},
+			&cli.IntFlag{
+				Name:  "num",
+				Usage: "number of files to show",
+				Value: 10,
+			},
+		},
+	}
+
+	return &cmd
+}
+
+func showAction(c *cli.Context) error {
+	img, err := image.OpenDimgOrCdimg(c.String("img"))
+	if err != nil {
+		return err
+	}
+	defer img.Close()
+
+	num := c.Int("num")
+	fes := listAllFiles(&img.DimgHeader().FileEntry)
+
+	sort.Slice(fes, func(i, j int) bool {
+		return fes[i].Size > fes[j].Size
+	})
+	for i := 0; i < num; i++ {
+		if i >= len(fes) {
+			break
+		}
+		fmt.Printf("%s\t%d\n", fes[i].Name, fes[i].Size)
+	}
+
+	return nil
+}
+
+func listAllFiles(root *image.FileEntry) []*image.FileEntry {
+	fes := []*image.FileEntry{root}
+	for childName := range root.Childs {
+		child := root.Childs[childName]
+		fes = append(fes, listAllFiles(child)...)
+	}
+	return fes
 }
