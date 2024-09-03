@@ -3,7 +3,11 @@
 [![Test](https://github.com/naoki9911/d4c/actions/workflows/test.yaml/badge.svg)](https://github.com/naoki9911/d4c/actions/workflows/test.yaml)
 
 This repository is PoC implementation of delta updating for containers.
+
 **D4C is in early development stage and more works are left.**
+
+# Articles
+- [N. Matsumoto, D. Kotani and Y. Okabe, "Efficient Container Image Updating in Low-bandwidth Networks with Delta Encoding," 2023 IEEE International Conference on Cloud Engineering (IC2E), Boston, MA, USA, 2023, pp. 1-10, doi: 10.1109/IC2E59103.2023.00009.](https://ieeexplore.ieee.org/document/10305845)
 
 # How to use
 ## Dependency
