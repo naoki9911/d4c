@@ -30,6 +30,7 @@ var (
 	debug       = flag.Bool("debug", false, "print debugging messages.")
 	other       = flag.Bool("allow-other", false, "mount with -o allowother.")
 	bench       = flag.Bool("benchmark", false, "measure benchmark")
+	benchOpen   = flag.Bool("benchmarkOpen", false, "measure benchmark for open latency")
 	parentDimg  = flag.String("parentDimg", "", "path to parent dimg")
 	diffDimg    = flag.String("diffDimg", "", "path to diff dimg")
 	parentCdimg = flag.String("parentCdimg", "", "path to parent cdimg")
@@ -238,7 +239,18 @@ func runMain(isChild bool, readyFd *os.File) error {
 		return err
 	}
 
-	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, parentImages, diffImageFile, pm)
+	var benchmarkerOpen *benchmark.Benchmark = nil
+	if *benchOpen {
+		benchmarkerOpen, err = benchmark.NewBenchmark("./benchmark-di3fs-open.log")
+		if err != nil {
+			return err
+		}
+		labels := utils.ParseLabels([]string{*label})
+		labels["parent"] = *parentDimg
+		labels["patch"] = *diffDimg
+		benchmarkerOpen.SetDefaultLabels(labels)
+	}
+	di3fsRoot, err := di3fs.NewDi3fsRoot(opts, parentImages, diffImageFile, pm, benchmarkerOpen)
 	if err != nil {
 		return fmt.Errorf("creating Di3fsRoot failed: %v", err)
 	}

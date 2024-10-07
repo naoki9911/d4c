@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
 	log "github.com/sirupsen/logrus"
@@ -63,8 +65,10 @@ func (dn *Di3fsNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.Att
 	return 0
 }
 
-func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
+// result returns: (raw bytes, byte count read from image, error)
+func (dn *Di3fsNode) readBaseFiles() ([]byte, int, error) {
 	diffIdxs := make([]int, 0)
+	readBytesCount := 0
 	for i := 0; i < len(dn.baseMeta); i++ {
 		baseMeta := dn.baseMeta[i]
 		baseImageOffset := dn.baseMeta[i].Offset
@@ -74,52 +78,56 @@ func (dn *Di3fsNode) readBaseFiles() ([]byte, error) {
 		}
 		if baseMeta.IsNew() {
 			zstdBytes := make([]byte, baseMeta.CompressedSize)
-			_, err := baseImageFile.ReadAt(zstdBytes, baseImageOffset)
+			read, err := baseImageFile.ReadAt(zstdBytes, baseImageOffset)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read from image: %v", err)
+				return nil, readBytesCount, fmt.Errorf("failed to read from image: %v", err)
 			}
+			readBytesCount += read
 			zstdReader, err := zstd.NewReader(bytes.NewBuffer(zstdBytes))
 			if err != nil {
-				return nil, err
+				return nil, readBytesCount, err
 			}
 			defer zstdReader.Close()
 			data, err := io.ReadAll(zstdReader)
 			if err != nil {
-				return nil, err
+				return nil, readBytesCount, err
 			}
 			if len(diffIdxs) == 0 {
-				return data, nil
+				return data, readBytesCount, nil
 			}
 			for j := len(diffIdxs) - 1; j >= 0; j -= 1 {
 				diffIdx := diffIdxs[j]
 				patchBytes := make([]byte, dn.baseMeta[diffIdx].CompressedSize)
-				_, err := dn.root.baseImageFiles[diffIdx].ReadAt(patchBytes, dn.baseMeta[diffIdx].Offset)
+				read, err := dn.root.baseImageFiles[diffIdx].ReadAt(patchBytes, dn.baseMeta[diffIdx].Offset)
 				if err != nil {
 					fmt.Println(err)
-					return nil, err
+					return nil, readBytesCount, err
 				}
+				readBytesCount += read
 				patchReader := bytes.NewBuffer(patchBytes)
 
 				newBytes, err := dn.plugin.Patch(data, patchReader)
 				if err != nil {
-					return nil, err
+					return nil, readBytesCount, err
 				}
 				data = newBytes
 			}
-			return data, nil
+			return data, readBytesCount, nil
 		}
 		diffIdxs = append(diffIdxs, i)
 	}
-	return nil, fmt.Errorf("not implemented")
+	return nil, readBytesCount, fmt.Errorf("not implemented")
 }
 
-func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
+// return is (bytes count read from image, handle, flags, error codes)
+func (dn *Di3fsNode) openFileInImage() (int, fs.FileHandle, uint32, syscall.Errno) {
+	readFromImageBytesCount := 0
 	if dn.patchedFile != nil {
 	} else if dn.patchedFilePath != "" {
 		file, err := os.Open(dn.patchedFilePath)
 		if err != nil {
 			log.Errorf("failed to open existing patched file %s: %v", dn.patchedFilePath, err)
-			return 0, 0, syscall.EIO
+			return 0, 0, 0, syscall.EIO
 		}
 		dn.patchedFile = file
 	} else {
@@ -129,42 +137,46 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 			_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
 			if err != nil {
 				log.Errorf("failed to read from diffImage offset=%d err=%s", dn.meta.Offset, err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
 			patchBuf := bytes.NewBuffer(patchBytes)
 			patchReader, err := zstd.NewReader(patchBuf)
 			if err != nil {
 				log.Errorf("failed to create zstd Reader err=%s", err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
 			defer patchReader.Close()
 			dataReader = patchReader
 		} else if dn.meta.IsSame() {
-			data, err := dn.readBaseFiles()
+			data, readCount, err := dn.readBaseFiles()
 			if err != nil {
 				log.Errorf("failed to read from base: %v", err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
+			readFromImageBytesCount = readCount
 			dataReader = bytes.NewReader(data)
 		} else {
 			var patchReader io.Reader
 			patchBytes := make([]byte, dn.meta.CompressedSize)
-			_, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
+			readCount, err := dn.root.diffImageFile.ReadAt(patchBytes, dn.meta.Offset)
 			if err != nil {
 				log.Errorf("failed to read from diffImage offset=%d len=%d err=%s", dn.meta.Offset, len(patchBytes), err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
+			readFromImageBytesCount += readCount
+
 			patchReader = bytes.NewBuffer(patchBytes)
-			baseData, err := dn.readBaseFiles()
+			baseData, readCount, err := dn.readBaseFiles()
 			if err != nil {
 				log.Errorf("failed to read from base: %v", err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
+			readFromImageBytesCount += readCount
 
 			newBytes, err := dn.plugin.Patch(baseData, patchReader)
 			if err != nil {
 				log.Errorf("Open failed(bsdiff) err=%v", err)
-				return 0, 0, syscall.EIO
+				return 0, 0, 0, syscall.EIO
 			}
 			dataReader = bytes.NewReader(newBytes)
 			log.Debugf("Successfully patched %s", dn.meta.Name)
@@ -173,33 +185,34 @@ func (dn *Di3fsNode) openFileInImage() (fs.FileHandle, uint32, syscall.Errno) {
 		data, err := io.ReadAll(dataReader)
 		if err != nil {
 			log.Errorf("failed to read all: %v", err)
-			return 0, 0, syscall.EIO
+			return 0, 0, 0, syscall.EIO
 		}
 		err = dn.meta.Verify(data)
 		if err != nil {
 			log.Errorf("failed to verify %s(%d): %v", dn.path, dn.meta.Type, err)
-			return 0, 0, syscall.EIO
+			return 0, 0, 0, syscall.EIO
 		}
 
 		dn.patchedFile, err = os.CreateTemp(dn.root.PatchedFilesDir, fmt.Sprintf("%s-*", dn.meta.Name))
 		if err != nil {
 			log.Errorf("failed to creat temporary file: %v", err)
-			return 0, 0, syscall.EIO
+			return 0, 0, 0, syscall.EIO
 		}
 		_, err = dn.patchedFile.Write(data)
 		if err != nil {
 			log.Errorf("failed to write data: %v", err)
-			return 0, 0, syscall.EIO
+			return 0, 0, 0, syscall.EIO
 		}
 		dn.patchedFilePath = dn.patchedFile.Name()
 	}
-	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
+	return readFromImageBytesCount, nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
 }
 
 func (dn *Di3fsNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	dn.openLock.Lock()
 	defer dn.openLock.Unlock()
 
+	start := time.Now()
 	defer func() {
 		dn.openCount += 1
 	}()
@@ -207,7 +220,24 @@ func (dn *Di3fsNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uin
 	log.Traceln("Open started")
 	defer log.Traceln("Open finished")
 	if dn.openCount == 0 {
-		return dn.openFileInImage()
+		readFromImageBytesCount, handle, flag, err := dn.openFileInImage()
+
+		if dn.root.bench != nil {
+			elapsed := time.Since(start)
+			metric := benchmark.Metric{
+				TaskName:     "di3fs-open",
+				ElapsedMicro: elapsed.Microseconds(),
+				Labels: map[string]string{
+					"path":               dn.path,
+					"fileSize":           strconv.Itoa(dn.meta.Size),
+					"fileEntryType":      strconv.Itoa(int(dn.meta.Type)),
+					"readBytesFromImage": strconv.Itoa(readFromImageBytesCount),
+				},
+			}
+			dn.root.bench.AppendResult(metric)
+		}
+
+		return handle, flag, err
 	}
 
 	return nil, fuse.FOPEN_KEEP_CACHE | fuse.FOPEN_CACHE_DIR, 0
@@ -340,6 +370,8 @@ type Di3fsRoot struct {
 	hardlinks       []*hardlinkNode
 	pm              *bsdiffx.PluginManager
 	PatchedFilesDir string
+
+	bench *benchmark.Benchmark
 }
 
 func (dr *Di3fsRoot) IsBase() bool {
@@ -371,7 +403,7 @@ func newNode(fe *image.FileEntry, baseFE []*image.FileEntry, root *Di3fsRoot) *D
 	return node
 }
 
-func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile, pm *bsdiffx.PluginManager) (*Di3fsRoot, error) {
+func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *image.DimgFile, pm *bsdiffx.PluginManager, bench *benchmark.Benchmark) (*Di3fsRoot, error) {
 	baseFEs := make([]*image.FileEntry, 0)
 	for i := range baseImages {
 		if baseImages[i] == nil {
@@ -393,6 +425,7 @@ func NewDi3fsRoot(opts *fs.Options, baseImages []*image.DimgFile, diffImage *ima
 		hardlinks:       []*hardlinkNode{},
 		pm:              pm,
 		PatchedFilesDir: filepath.Join(os.TempDir(), fmt.Sprintf("di3fs-%s", dirUuid.String())),
+		bench:           bench,
 	}
 	err = os.MkdirAll(root.PatchedFilesDir, 0644)
 	if err != nil {
@@ -450,7 +483,7 @@ func Do(dimgPaths []string, mountPath string, mountDone chan bool) error {
 		return err
 	}
 
-	di3fsRoot, err := NewDi3fsRoot(opts, parentImageFiles, diffImageFile, pm)
+	di3fsRoot, err := NewDi3fsRoot(opts, parentImageFiles, diffImageFile, pm, nil)
 	if err != nil {
 		log.Fatalf("creating Di3fsRoot failed: %v\n", err)
 	}
