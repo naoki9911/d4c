@@ -13,7 +13,7 @@ with open(sys.argv[1]) as f:
     for l in f.readlines():
         r = json.loads(l)
         task = r["taskName"]
-        if task != "diff" and task != "merge":
+        if task != "diff":
             continue
         labels = r["labels"]
         name = "{}-{}-{}".format(labels["imageName"], labels["old"], labels["new"])
@@ -45,7 +45,7 @@ for enc in diff_time.keys():
     for th in threads:
         for task in diff_time[enc][th].keys():
             r = diff_time[enc][th][task]
-            l = "{} ({})".format(task, enc.replace("bsdiffx", "bsdiff"))
+            l = "{}".format(enc.replace("bsdiffx", "bsdiff"))
             if l not in diff_time_agg:
                 diff_time_agg[l] = []
             diff_time_agg[l].append(sum(r) / len(r))
@@ -62,4 +62,4 @@ for l in diff_time_agg:
 plt.legend()
 plt.tight_layout()
 
-plt.savefig("eval-multithread.pdf")
+plt.savefig("eval-multithread-diff.pdf")

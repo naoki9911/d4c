@@ -31,7 +31,7 @@ for th in ["8"]:
         for comp in ["bzip2"]:
             for enc in [("xdelta3", "xdelta3"), ("bsdiffx", "bsdiff")]:
                 for task in ["patch", "di3fs"]:
-                    labels.append((("{}-th-{}-sched-{}-comp-{}-enc-{}".format(task, th, sched, comp, enc[0])), "{}({})".format(enc[1], task)))
+                    labels.append((("{}-th-{}-sched-{}-comp-{}-enc-{}".format(task, th, sched, comp, enc[0])), "{}({})".format(enc[1], task.replace("di3fs", "Di3FS"))))
 
 plt.rcParams["figure.figsize"] = (12,4)
 plt.rcParams["font.size"] = 16
