@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/bsdiffx"
 )
 
@@ -16,12 +17,20 @@ func Diff(oldBytes, newBytes []byte, patchWriter io.Writer, mode bsdiffx.Compres
 	return bsdiffx.Diff(oldBytes, newBytes, patchWriter, mode)
 }
 
+func DiffWithBreakdown(oldBytes, newBytes []byte, patchWriter io.Writer, mode bsdiffx.CompressionMode, b *benchmark.Benchmark) error {
+	return bsdiffx.DiffWithBreakdown(oldBytes, newBytes, patchWriter, mode, b)
+}
+
 func Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {
 	return bsdiffx.Patch(oldBytes, patchReader)
 }
 
 func Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 	return bsdiffx.DeltaMergingBytes(lowerDiff, upperDiff, mergedDiff)
+}
+
+func MergeWithBreakdown(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, b *benchmark.Benchmark) error {
+	return bsdiffx.DeltaMergingBytesWithBreakdown(lowerDiff, upperDiff, mergedDiff, b)
 }
 
 func Compare(a, b []byte) bool {

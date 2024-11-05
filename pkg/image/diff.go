@@ -164,6 +164,7 @@ type DiffConfig struct {
 	CompressionMode  bsdiffx.CompressionMode
 	BenchmarkPerFile bool
 	Benchmarker      *benchmark.Benchmark
+	BreakdownBench   *benchmark.Benchmark
 	DeltaEncoding    string
 }
 
@@ -380,7 +381,11 @@ func generateDiffMultithread(oldDimgFile, newDimgFile *DimgFile, oldEntry, newEn
 						// old File may be 0-bytes
 						diffWriter := new(bytes.Buffer)
 						//fmt.Printf("oldBytes=%d newBytes=%d old=%v new=%v\n", len(oldBytes), len(newBytes), *oldChildEntry, *newChildEntry)
-						err = p.Diff(oldBytes, newBytes, diffWriter, dc.CompressionMode)
+						if dc.BreakdownBench != nil {
+							err = p.DiffWithBreakdown(oldBytes, newBytes, diffWriter, dc.CompressionMode, dc.BreakdownBench)
+						} else {
+							err = p.Diff(oldBytes, newBytes, diffWriter, dc.CompressionMode)
+						}
 						if err != nil {
 							logger.Errorf("failed to bsdiff.Diff: %v", err)
 							break

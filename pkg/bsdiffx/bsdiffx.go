@@ -1,14 +1,18 @@
 package bsdiffx
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
+	"strconv"
+	"time"
 
 	"github.com/dsnet/compress/bzip2"
 	"github.com/icedream/go-bsdiff/raw/diff"
 	"github.com/icedream/go-bsdiff/raw/patch"
 	"github.com/klauspost/compress/zstd"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 )
 
 var (
@@ -123,6 +127,43 @@ func Diff(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode
 	defer writer.Close()
 
 	return diff.Diff(oldBytes, newBytes, writer)
+}
+
+func DiffWithBreakdown(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode, b *benchmark.Benchmark) error {
+	startDiff := time.Now()
+	outBytes := bytes.NewBuffer(nil)
+	err := diff.Diff(oldBytes, newBytes, outBytes)
+	if err != nil {
+		return err
+	}
+
+	startWrite := time.Now()
+	writer, err := WritePatch(patchWriter, uint64(len(newBytes)), mode)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(outBytes.Bytes())
+	if err != nil {
+		return err
+	}
+	writer.Close()
+	finished := time.Now()
+
+	elapsed := finished.Sub(startDiff)
+	metric := benchmark.Metric{
+		TaskName:     "diff",
+		ElapsedMicro: elapsed.Microseconds(),
+		Size:         int64(len(newBytes)),
+		Labels: map[string]string{
+			"diffMircoseconds":  strconv.Itoa(int(startWrite.Sub(startDiff).Microseconds())),
+			"writeMicroseconds": strconv.Itoa(int(finished.Sub(startWrite).Microseconds())),
+		},
+	}
+	err = b.AppendResult(metric)
+	if err != nil {
+		panic(err)
+	}
+	return nil
 }
 
 func Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {

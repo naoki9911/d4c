@@ -62,6 +62,12 @@ func DimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.BoolFlag{
+				Name:     "mergeBreakdown",
+				Usage:    "enable breakdown logging for plugin.Merge",
+				Value:    false,
+				Required: false,
+			},
 			&cli.IntFlag{
 				Name:     "threadNum",
 				Usage:    "The number of threads to process",
@@ -117,11 +123,22 @@ func dimgAction(c *cli.Context) error {
 		b.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
 	}
 
+	var mergeBreakdownBench *benchmark.Benchmark = nil
+	if c.Bool("mergeBreakdown") {
+		mergeBreakdownBench, err = benchmark.NewBenchmark("./merge-breakdown.log")
+		if err != nil {
+			return err
+		}
+		defer mergeBreakdownBench.Close()
+		mergeBreakdownBench.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
+	}
+
 	mergeConfig := image.MergeConfig{
-		ThreadNum:              threadNum,
-		MergeDimgConcurrentNum: mergeDimgConcurrentNum,
-		BenchmarkPerFile:       enableBenchPerFile,
-		Benchmarker:            b,
+		ThreadNum:                 threadNum,
+		MergeDimgConcurrentNum:    mergeDimgConcurrentNum,
+		BenchmarkPerFile:          enableBenchPerFile,
+		Benchmarker:               b,
+		MergeBreakdownBenchmarker: mergeBreakdownBench,
 	}
 	var header *image.DimgHeader
 	start := time.Now()

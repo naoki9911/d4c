@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"time"
 
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -15,6 +18,18 @@ type DiffBlock = struct {
 	newPos      int64
 	addBytes    []byte
 	insertBytes []byte
+}
+
+type MergeStat = struct {
+	Count   int
+	Bytes   int
+	Elapsed time.Duration
+}
+type MergeStats = struct {
+	AddAndAdd       MergeStat
+	AddAndInsert    MergeStat
+	InsertAndAdd    MergeStat
+	InsertAndInsert MergeStat
 }
 
 func NewDiffBlock(oldPos, newPos int64) DiffBlock {
@@ -246,7 +261,7 @@ func getBlock(newPos int64, blocks []DiffBlock) *DiffBlock {
 	}
 }
 
-func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock, error) {
+func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File, ms *MergeStats) ([]DiffBlock, error) {
 	var merged = []DiffBlock{}
 	lowerLastBlock := lower[len(lower)-1]
 	lowerSize := lowerLastBlock.newPos + int64(len(lowerLastBlock.addBytes)) + int64(len(lowerLastBlock.insertBytes))
@@ -262,6 +277,7 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 		state := 0
 		mergeBlock := NewDiffBlock(0, upperBlock.newPos)
 		for cur < int64(len(upperBlock.addBytes))+int64(len(upperBlock.insertBytes)) {
+			start := time.Now()
 			log.Tracef("upperOldPos=%d upperNewPos=%d", upperBlock.oldPos+cur, upperBlock.newPos+cur)
 			if upperBlock.oldPos+cur >= lowerSize {
 				if upperBlock.newPos+cur < upperInsertPos {
@@ -330,6 +346,13 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 						cur += int64(addLen)
 
 						state = 1
+
+						if ms != nil {
+							ms.AddAndAdd.Count += 1
+							ms.AddAndAdd.Bytes += addLen
+							ms.AddAndAdd.Elapsed += time.Since(start)
+							start = time.Now()
+						}
 					} else {
 						log.Tracef("lower=ADD upper=INSERT\n")
 						// upper INSERT
@@ -348,6 +371,13 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 						state = 2
 
 						cur += int64(insertLen)
+
+						if ms != nil {
+							ms.AddAndInsert.Count += 1
+							ms.AddAndInsert.Bytes += insertLen
+							ms.AddAndInsert.Elapsed += time.Since(start)
+							start = time.Now()
+						}
 					}
 				} else {
 					// lower INSERT
@@ -371,6 +401,13 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 						state = 2
 
 						cur += int64(insertLen)
+
+						if ms != nil {
+							ms.InsertAndAdd.Count += 1
+							ms.InsertAndAdd.Bytes += insertLen
+							ms.InsertAndAdd.Elapsed += time.Since(start)
+							start = time.Now()
+						}
 					} else {
 						// upper INSERT
 						upperInsertBytesBegin := cur - int64(len(upperBlock.addBytes))
@@ -385,6 +422,13 @@ func mergeBlocks(lower, upper []DiffBlock, base, updated *os.File) ([]DiffBlock,
 						state = 2
 
 						cur += int64(insertLen)
+
+						if ms != nil {
+							ms.InsertAndInsert.Count += 1
+							ms.InsertAndInsert.Bytes += insertLen
+							ms.InsertAndInsert.Elapsed += time.Since(start)
+							start = time.Now()
+						}
 					}
 				}
 			}
@@ -429,23 +473,69 @@ func checkBlock(mergeBlock *DiffBlock, base, updated *os.File) {
 }
 
 func DeltaMergingBytes(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
+	return DeltaMergingBytesWithBreakdown(lowerDiff, upperDiff, mergedDiff, nil)
+}
+
+func DeltaMergingBytesWithBreakdown(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, b *benchmark.Benchmark) error {
+	var mergeStats *MergeStats = nil
+	if b != nil {
+		mergeStats = &MergeStats{}
+	}
+
+	startReadLower := time.Now()
 	lowerBlocks, _, _, err := readPatch(lowerDiff)
 	if err != nil {
 		return err
 	}
+	startReadUpper := time.Now()
 	upperBlocks, newLen, compMode, err := readPatch(upperDiff)
 	if err != nil {
 		return err
 	}
-
-	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, nil, nil)
+	startMergeBlocks := time.Now()
+	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, nil, nil, mergeStats)
 	if err != nil {
 		return err
 	}
-
+	startWrite := time.Now()
 	err = writePatch(mergedDiff, newLen, mergedBlocks, compMode)
 	if err != nil {
 		return err
+	}
+	finished := time.Now()
+
+	if b != nil {
+		elapsed := finished.Sub(startReadLower)
+		metric := benchmark.Metric{
+			TaskName:     "delta-merging",
+			ElapsedMicro: elapsed.Microseconds(),
+			Size:         int64(newLen),
+			Labels: map[string]string{
+				"readLowerBlocksMircoseconds":     strconv.Itoa(int(startReadUpper.Sub(startReadLower).Microseconds())),
+				"readUpperBlocksMircoseconds":     strconv.Itoa(int(startMergeBlocks.Sub(startReadUpper).Microseconds())),
+				"mergeBlocksMircoseconds":         strconv.Itoa(int(startWrite.Sub(startMergeBlocks).Microseconds())),
+				"writeBlocksMicroseconds":         strconv.Itoa(int(finished.Sub(startWrite).Microseconds())),
+				"lowerBlocksNum":                  strconv.Itoa(len(lowerBlocks)),
+				"upperBlocksNum":                  strconv.Itoa(len(upperBlocks)),
+				"mergedBlocksNum":                 strconv.Itoa(len(mergedBlocks)),
+				"ms.AddAndAdd.Count":              strconv.Itoa(mergeStats.AddAndAdd.Count),
+				"ms.AddAndAdd.Bytes":              strconv.Itoa(mergeStats.AddAndAdd.Bytes),
+				"ms.AddAndAdd.Microseconds":       strconv.Itoa(int(mergeStats.AddAndAdd.Elapsed.Microseconds())),
+				"ms.AddAndInsert.Count":           strconv.Itoa(mergeStats.AddAndInsert.Count),
+				"ms.AddAndInsert.Bytes":           strconv.Itoa(mergeStats.AddAndInsert.Bytes),
+				"ms.AddAndInsert.Microseconds":    strconv.Itoa(int(mergeStats.AddAndInsert.Elapsed.Microseconds())),
+				"ms.InsertAndAdd.Count":           strconv.Itoa(mergeStats.InsertAndAdd.Count),
+				"ms.InsertAndAdd.Bytes":           strconv.Itoa(mergeStats.InsertAndAdd.Bytes),
+				"ms.InsertAndAdd.Microseconds":    strconv.Itoa(int(mergeStats.InsertAndAdd.Elapsed.Microseconds())),
+				"ms.InsertAndInsert.Count":        strconv.Itoa(mergeStats.InsertAndInsert.Count),
+				"ms.InsertAndInsert.Bytes":        strconv.Itoa(mergeStats.InsertAndInsert.Bytes),
+				"ms.InsertAndInsert.Microseconds": strconv.Itoa(int(mergeStats.InsertAndInsert.Elapsed.Microseconds())),
+			},
+		}
+		err := b.AppendResult(metric)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return nil
@@ -461,7 +551,7 @@ func DeltaMergingBytesDebug(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer
 		return err
 	}
 
-	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, base, updated)
+	mergedBlocks, err := mergeBlocks(lowerBlocks, upperBlocks, base, updated, nil)
 	if err != nil {
 		return err
 	}

@@ -60,6 +60,12 @@ func DimgCommand() *cli.Command {
 				Value:    false,
 				Required: false,
 			},
+			&cli.BoolFlag{
+				Name:     "diffBreakdown",
+				Usage:    "enable benchmark for breakdown",
+				Value:    false,
+				Required: false,
+			},
 			&cli.IntFlag{
 				Name:     "threadNum",
 				Usage:    "The number of threads to process",
@@ -125,6 +131,16 @@ func dimgAction(c *cli.Context) error {
 		b.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
 	}
 
+	var breakdownBench *benchmark.Benchmark = nil
+	if c.Bool("diffBreakdown") {
+		breakdownBench, err = benchmark.NewBenchmark("./diff-breakdown.log")
+		if err != nil {
+			return err
+		}
+		defer breakdownBench.Close()
+		breakdownBench.SetDefaultLabels(utils.ParseLabels(c.StringSlice("labels")))
+	}
+
 	start := time.Now()
 
 	compressionMode := c.String("compressionMode")
@@ -139,6 +155,7 @@ func dimgAction(c *cli.Context) error {
 		CompressionMode:  compMode,
 		BenchmarkPerFile: enableBenchPerFile,
 		Benchmarker:      b,
+		BreakdownBench:   breakdownBench,
 		DeltaEncoding:    c.String("deltaEncoding"),
 	}
 	err = image.GenerateDiffFromDimg(oldDimg, newDimg, outDimg, mode == ModeDiffBinary, dc, pm)

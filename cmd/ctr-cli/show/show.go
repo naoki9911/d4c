@@ -3,6 +3,7 @@ package show
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/containerd/containerd/log"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/image"
@@ -25,6 +26,10 @@ func DimgCommand() *cli.Command {
 				Usage:    "path to dimg",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:  "path",
+				Usage: "path to file",
+			},
 		},
 	}
 
@@ -34,6 +39,7 @@ func DimgCommand() *cli.Command {
 func dimgAction(c *cli.Context) error {
 	logger.Logger.SetLevel(logrus.WarnLevel)
 	dimgPath := c.String("dimg")
+	filePath := c.String("path")
 
 	dimgFile, err := image.OpenDimgFile(dimgPath)
 	if err != nil {
@@ -43,6 +49,25 @@ func dimgAction(c *cli.Context) error {
 	header := dimgFile.DimgHeader()
 	fmt.Printf("ID: %s\n", header.Id)
 	fmt.Printf("ParentID: %s\n", header.ParentId)
+
+	if filePath != "" {
+		paths := strings.Split(filePath, "/")
+		fmt.Printf("%v\n", paths)
+		fe := &header.FileEntry
+		files := header.FileEntry.Childs
+		for _, path := range paths {
+			fmt.Printf("current path = %s\n", path)
+			childFile, ok := files[path]
+			if !ok {
+				continue
+			}
+			files = childFile.Childs
+			fe = childFile
+		}
+
+		fmt.Printf("fe: %v\n", fe)
+	}
+
 	return nil
 }
 

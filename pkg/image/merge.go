@@ -40,7 +40,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 	go func() {
 		defer wg.Done()
 		logger.Info("started merge task enqueue thread")
-		err := enqueueMergeTaskToQueue(lowerEntry, upperEntry, mergeTasks)
+		err := enqueueMergeTaskToQueue(lowerEntry, upperEntry, mergeTasks, &mc)
 		if err != nil {
 			gErr = fmt.Errorf("failed to enqueue: %v", err)
 			cancel()
@@ -166,7 +166,11 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 								return
 							}
 							mergeBytes := bytes.NewBuffer(nil)
-							err = p.Merge(bytes.NewBuffer(lowerBytes), bytes.NewBuffer(upperBytes), mergeBytes)
+							if mc.MergeBreakdownBenchmarker != nil {
+								err = p.MergeWithBreakdown(bytes.NewBuffer(lowerBytes), bytes.NewBuffer(upperBytes), mergeBytes, mc.MergeBreakdownBenchmarker)
+							} else {
+								err = p.Merge(bytes.NewBuffer(lowerBytes), bytes.NewBuffer(upperBytes), mergeBytes)
+							}
 							if err != nil {
 								gErr = fmt.Errorf("failed to merge diffs: %v", err)
 								cancel()
@@ -210,7 +214,7 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 					if mc.BenchmarkPerFile {
 						metric := benchmark.Metric{
 							TaskName:     "merge-per-file",
-							ElapsedMilli: int(elapsed.Milliseconds()),
+							ElapsedMicro: elapsed.Microseconds(),
 							Size:         int64(mt.upperEntry.Size),
 							Labels: map[string]string{
 								"mergeMode":      mode,
@@ -247,14 +251,14 @@ func mergeDiffDimgMultihread(lowerImgFile, upperImgFile *DimgFile, mergeOut *byt
 }
 
 // upperEntry is updated to merged FileEntry
-func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan mergeTask) error {
+func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan mergeTask, mc *MergeConfig) error {
 	for upperfName := range upperEntry.Childs {
 		upperChild := upperEntry.Childs[upperfName]
 		switch upperChild.Type {
 		case FILE_ENTRY_DIR_NEW, FILE_ENTRY_FILE_NEW, FILE_ENTRY_SYMLINK, FILE_ENTRY_HARDLINK:
 			log.Debugf("upperChild is new")
 			if upperChild.IsDir() {
-				err := enqueueMergeTaskToQueue(nil, upperChild, taskChan)
+				err := enqueueMergeTaskToQueue(nil, upperChild, taskChan, mc)
 				if err != nil {
 					return err
 				}
@@ -263,6 +267,24 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 					lowerEntry: nil,
 					upperEntry: upperChild,
 				}
+			} else if upperChild.IsLink() {
+				if mc.BenchmarkPerFile {
+					metric := benchmark.Metric{
+						TaskName:     "merge-per-file",
+						ElapsedMicro: 0,
+						Size:         int64(upperChild.Size),
+						Labels: map[string]string{
+							"mergeMode":      "upper-link",
+							"compressedSize": "0",
+						},
+					}
+					err := mc.Benchmarker.AppendResult(metric)
+					if err != nil {
+						panic(err)
+					}
+				}
+			} else {
+				panic("unexpected")
 			}
 		default:
 			lowerChild, ok := lowerEntry.Childs[upperfName]
@@ -273,7 +295,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 				return fmt.Errorf("upperChild is %s but lowerChild(%s) not found: %v", EntryTypeToString(upperChild.Type), upperfName, upperChild.Childs)
 			}
 
-			// When the lower has SYMLINK, the upper must have 'New' entries
+			// When the lower has SYMLINK, the upper must have 'Link' or 'New' entries
 			// Such files must be processed above case.
 			if lowerChild.IsLink() {
 				return fmt.Errorf("lowerChild is symlink or hardlink")
@@ -282,7 +304,7 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 			switch upperChild.Type {
 			case FILE_ENTRY_DIR:
 				if lowerChild.IsDir() {
-					err := enqueueMergeTaskToQueue(lowerChild, upperChild, taskChan)
+					err := enqueueMergeTaskToQueue(lowerChild, upperChild, taskChan, mc)
 					if err != nil {
 						return err
 					}
@@ -304,6 +326,21 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 					}
 				} else if lowerChild.Type == FILE_ENTRY_FILE_SAME {
 					// this branch is ignored
+					if mc.BenchmarkPerFile {
+						metric := benchmark.Metric{
+							TaskName:     "merge-per-file",
+							ElapsedMicro: 0,
+							Size:         int64(upperChild.Size),
+							Labels: map[string]string{
+								"mergeMode":      "both-file-same",
+								"compressedSize": "0",
+							},
+						}
+						err := mc.Benchmarker.AppendResult(metric)
+						if err != nil {
+							panic(err)
+						}
+					}
 				} else {
 					return fmt.Errorf("upperChild is FILE_SAME but lowerChild does not have body")
 				}
@@ -321,7 +358,10 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 				} else {
 					return fmt.Errorf("upperChild is FILE_DIFF but lowerChild does not have body")
 				}
+			default:
+				panic("unexpected")
 			}
+
 		}
 	}
 
@@ -329,10 +369,11 @@ func enqueueMergeTaskToQueue(lowerEntry, upperEntry *FileEntry, taskChan chan me
 }
 
 type MergeConfig struct {
-	ThreadNum              int
-	MergeDimgConcurrentNum int
-	BenchmarkPerFile       bool
-	Benchmarker            *benchmark.Benchmark
+	ThreadNum                 int
+	MergeDimgConcurrentNum    int
+	BenchmarkPerFile          bool
+	Benchmarker               *benchmark.Benchmark
+	MergeBreakdownBenchmarker *benchmark.Benchmark
 }
 
 func MergeDimg(lowerDimg, upperDimg string, merged io.Writer, mc MergeConfig, pm *bsdiffx.PluginManager) (*DimgHeader, error) {

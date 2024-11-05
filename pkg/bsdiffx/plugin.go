@@ -9,6 +9,7 @@ import (
 	"plugin"
 
 	"github.com/google/uuid"
+	"github.com/naoki9911/fuse-diff-containerd/pkg/benchmark"
 	"github.com/naoki9911/fuse-diff-containerd/pkg/utils"
 )
 
@@ -145,13 +146,15 @@ func (pm *PluginManager) GetPluginByUuid(uuid uuid.UUID) *Plugin {
 }
 
 type Plugin struct {
-	p       *plugin.Plugin
-	info    func() string
-	diff    func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode) error
-	patch   func(oldBytes []byte, patchReader io.Reader) ([]byte, error)
-	merge   func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error
-	compare func(a, b []byte) bool
-	id      func() uuid.UUID
+	p                  *plugin.Plugin
+	info               func() string
+	diff               func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode) error
+	diffWithBreakdown  func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode, b *benchmark.Benchmark) error
+	patch              func(oldBytes []byte, patchReader io.Reader) ([]byte, error)
+	merge              func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error
+	mergeWithBreakdown func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, b *benchmark.Benchmark) error
+	compare            func(a, b []byte) bool
+	id                 func() uuid.UUID
 }
 
 func defaultPluginInfo() string {
@@ -209,6 +212,16 @@ func OpenPlugin(path string) (*Plugin, error) {
 	}
 	plugin.merge = sMerge.(func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error)
 
+	sDiffBKD, err := p.Lookup("DiffWithBreakdown")
+	if err == nil {
+		plugin.diffWithBreakdown = sDiffBKD.(func(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode, b *benchmark.Benchmark) error)
+	}
+
+	sMergeBKD, err := p.Lookup("MergeWithBreakdown")
+	if err == nil {
+		plugin.mergeWithBreakdown = sMergeBKD.(func(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, b *benchmark.Benchmark) error)
+	}
+
 	sCompare, err := p.Lookup("Compare")
 	if err != nil {
 		return nil, err
@@ -232,12 +245,20 @@ func (p *Plugin) Diff(oldBytes, newBytes []byte, patchWriter io.Writer, mode Com
 	return p.diff(oldBytes, newBytes, patchWriter, mode)
 }
 
+func (p *Plugin) DiffWithBreakdown(oldBytes, newBytes []byte, patchWriter io.Writer, mode CompressionMode, b *benchmark.Benchmark) error {
+	return p.diffWithBreakdown(oldBytes, newBytes, patchWriter, mode, b)
+}
+
 func (p *Plugin) Patch(oldBytes []byte, patchReader io.Reader) ([]byte, error) {
 	return p.patch(oldBytes, patchReader)
 }
 
 func (p *Plugin) Merge(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer) error {
 	return p.merge(lowerDiff, upperDiff, mergedDiff)
+}
+
+func (p *Plugin) MergeWithBreakdown(lowerDiff, upperDiff io.Reader, mergedDiff io.Writer, b *benchmark.Benchmark) error {
+	return p.mergeWithBreakdown(lowerDiff, upperDiff, mergedDiff, b)
 }
 
 func (p *Plugin) Compare(a, b []byte) bool {
