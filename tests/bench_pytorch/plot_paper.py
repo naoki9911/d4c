@@ -90,7 +90,7 @@ plt.rcParams["figure.figsize"] = (10,5)
 plt.rcParams["font.size"] = 16
 fig, ax = plt.subplots(nrows=1, ncols=2, sharex=True)
 ax[0].set_ylabel("Average inference time (Milliseconds)")
-ax[0].set_xlabel("N-th round in benchmark loop")
+ax[0].set_xlabel("Interation")
 for l in bench_agg:
     ax[0].errorbar(run, bench_agg[l]["avg"], yerr=bench_std_agg[l]["avg"], capsize=5, marker="o", linestyle="dashed", label=l)
     #ax.label(p)
@@ -99,7 +99,7 @@ ax[0].set_ylim(0, 40)
 
 #ax12 = ax[1].twinx()
 ax[1].set_ylabel("Loading libraries time (seconds)")
-ax[1].set_xlabel("N-th round in benchmark loop")
+ax[1].set_xlabel("Iteration")
 #ax12.set_ylabel("Running benchmark time (seconds)")
 for l in load_agg:
     ax[1].errorbar(run, load_agg[l]["avg"], yerr=load_agg[l]["stdev"], capsize=5, marker="o", linestyle="dotted", label="Load libs({})".format(l).replace("(bsdiff)", ""))
