@@ -8,7 +8,7 @@ This repository is PoC implementation of delta updating for containers.
 
 # Articles
 - [N. Matsumoto, D. Kotani and Y. Okabe, "Efficient Container Image Updating in Low-bandwidth Networks with Delta Encoding," 2023 IEEE International Conference on Cloud Engineering (IC2E), Boston, MA, USA, 2023, pp. 1-10, doi: 10.1109/IC2E59103.2023.00009.](https://ieeexplore.ieee.org/document/10305845)
-
+- [Naoki MATSUMOTO, Daisuke KOTANI, Yasuo OKABE, "D4C: Fast and Efficient Container Image Updating for Edge with Delta Encodings" in IEICE TRANSACTIONS on Communications, vol. E108-B, no. 7, pp. 780-795, July 2025, doi: 10.23919/transcom.2024EBT0008.](https://globals.ieice.org/en_transactions/communications/10.23919/transcom.2024EBT0008/_f)
 # How to use
 ## Dependency
 D4C depends on the below software.
